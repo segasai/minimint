@@ -68,13 +68,11 @@ def read_grid(eep_prefix, outp_prefix):
     os.makedirs(outp_prefix, exist_ok=True)
     tabs.write(outp_prefix + '/' + TRACKS_FILE, overwrite=True)
 
-
 def grid3d_filler(ima):
     nx, ny, nz = ima.shape
     for i in range(nx):
         for k in range(nz):
             grid1d_filler(ima[i, :, k])
-
 
 def grid1d_filler(arr):
     xids = np.nonzero(np.isfinite(arr))[0]
@@ -86,7 +84,6 @@ def grid1d_filler(arr):
                                                         arr[xids],
                                                         s=0,
                                                         k=1)(xids1)
-
 
 def prepare(eep_prefix, bolom_prefix, outp_prefix=None, 
             filters=('SDSSugriz', 'SkyMapper', 'UBVRIplus', 'DECam', 'WISE')):

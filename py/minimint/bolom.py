@@ -1,13 +1,15 @@
 import glob
 import itertools
+import re
+import os
 import scipy.interpolate
 import scipy.spatial
-import os
 import astropy.table as atpy
 import numpy as np
+from .utils import get_data_path
+
 POINTS_NPY = 'bolom_points.npy'
 FILT_NPY = 'filt_%s.npy'
-
 
 def read_bolom(filt, iprefix):
     fs = sorted(glob.glob('%s/*%s' % (iprefix, filt)))
@@ -134,6 +136,16 @@ class BCInterpolator:
             res[f][bad] = np.nan
         return res
 
+def list_filters(path=None):
+    if path is None:
+        path = get_data_path()
+    
+    fs = glob.glob(path+'/'+FILT_NPY%'*')
+    filts = []
+    for  f in fs:
+        filts.append(re.match(FILT_NPY%'(.*)', f.split('/')[-1]).group(1))
+    return filts
+    
 
 def prepare(iprefix,
             oprefix,

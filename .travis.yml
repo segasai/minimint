@@ -14,8 +14,8 @@ script:
   - wget -i ../eeps.list
   - for a in *txz ; do tar xfJ $a ; done
   - cd ..
-  - mkdir BC
-  - cd BC
+  - mkdir BCS
+  - cd BCS
   - wget -i ../bc.list
   - for a in *txz ; do tar xfJ $a ; done
   - cd ..

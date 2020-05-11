@@ -111,7 +111,7 @@ class BCInterpolator:
 
 def prepare(iprefix,
             oprefix,
-            filters=('SDSSugriz', 'SkyMapper', 'UBVRIplus', 'DECam')):
+            filters=('SDSSugriz', 'SkyMapper', 'UBVRIplus', 'DECam','WISE')):
     cols_ex = ['Teff', 'logg', '[Fe/H]', 'Av', 'Rv']
     last_vec = None
     for i, filt in enumerate(filters):

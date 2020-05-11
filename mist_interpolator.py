@@ -8,7 +8,7 @@ import os
 
 TRACKS_FILE = 'tracks.fits'
 LOGL_FILE = 'logl_grid.npy'
-LOGG_FILE = 'logl_grid.npy'
+LOGG_FILE = 'logg_grid.npy'
 LOGAGE_FILE = 'logage_grid.npy'
 LOGTEFF_FILE = 'logteff_grid.npy'
 INTERP_PKL = 'interp.pkl'
@@ -189,7 +189,10 @@ class FullInterpolator:
         self.isoInt = Interpolator(prefix)
         self.bolomInt = bolom.BCInterpolator(prefix, filts)
 
-    def __call__(self, mass, logage, feh):
+    def __call__(self, mass, logage, feh): 
+        mass, logage, feh = [np.asarray(_) for _ in [mass,logage,feh]]
+        shape = mass.shape
+        mass, logage, feh = [np.atleast_1d(_) for _ in [mass,logage,feh]]
         ret1 = self.isoInt(mass, logage, feh)
         logg, logteff, logl = [ret1[_] for _ in ['logg', 'logteff', 'logl']]
         xind = np.isfinite(logl)
@@ -200,6 +203,8 @@ class FullInterpolator:
         for k in res0:
             res[k] = np.zeros(len(logg)) - np.nan
             res[k][xind] = 4.74 - 2.5 * (logl[xind]) - res0[k]
+        for k in res.keys():
+            res[k] = res[k].reshape(shape)
         return res
 
         # teff logg feh order

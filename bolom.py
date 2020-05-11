@@ -1,4 +1,5 @@
 import glob
+import itertools
 import scipy.interpolate
 import scipy.spatial
 import os
@@ -91,27 +92,51 @@ class BCInterpolator:
         size = [len(self.uvecs[_]) for _ in range(ndim)]
         dats = {}
         self.filts = filts
-        self.interps = {}
+        self.dats = {}
         for f in filts:
             curd = np.zeros(size) - np.nan
             curd[tuple(self.uids)] = np.load(prefix + '/' + FILT_NPY % (f, ))
-            dats[f] = curd
-            self.interps[f] = scipy.interpolate.RegularGridInterpolator(
-                self.uvecs, dats[f], method='linear', bounds_error=False)
+            self.dats[f] = curd
+            #self.interps[f] = scipy.interpolate.RegularGridInterpolator(
+            #    self.uvecs, dats[f], method='linear', bounds_error=False)
 
     def __call__(self, p):
         ## assert arguments is np.log10(tabs['Teff']), tabs['logg'], tabs['[Fe/H]'], tabs['Av']])
         ## shaped N,4
         res = {}
-        for f in self.filts:
-            res[f] = self.interps[f](p)
-        return res
+        pos1 = np.zeros(p.shape, dtype=int)
+        xs = np.zeros(p.shape)
+        bad = np.zeros(p.shape[0], dtype=bool)
+        for i in range(self.ndim):
+            pos1[:, i] = np.searchsorted(self.uvecs[i], p[:, i],'right') - 1
+            bad = bad | (pos1[:, i] < 0) | (pos1[:, i] >=
+                                            (len(self.uvecs[i]) - 1))
+            pos1[:, i][bad] = 0
+            xs[:, i] = (p[:, i] - self.uvecs[i][pos1[:, i]]) / (
+                self.uvecs[i][pos1[:, i] + 1] - self.uvecs[i][pos1[:, i]]
+            )  # from 0 to 1
 
+        curinds = []
+        curcoeffs = []
+        for a in itertools.product(*[[0, 1]] * self.ndim):
+            a = np.array(a)
+            curinds.append(
+                tuple([(pos1[:, i] + a[i]) for i in range(self.ndim)]))
+            curcoeffs.append(
+                (xs**a[None, :] * (1 - xs)**(1 - a[None, :])).prod(axis=1))
+
+        for f in self.filts:
+            curres = np.zeros(p.shape[0])
+            for curi, curc in zip(curinds, curcoeffs):
+                curres[:] = curres + self.dats[f][curi] * curc
+            res[f] = curres
+            res[f][bad] = np.nan
+        return res
 
 
 def prepare(iprefix,
             oprefix,
-            filters=('SDSSugriz', 'SkyMapper', 'UBVRIplus', 'DECam','WISE')):
+            filters=('SDSSugriz', 'SkyMapper', 'UBVRIplus', 'DECam', 'WISE')):
     cols_ex = ['Teff', 'logg', '[Fe/H]', 'Av', 'Rv']
     last_vec = None
     for i, filt in enumerate(filters):

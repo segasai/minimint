@@ -2,7 +2,7 @@ import astropy.table as atpy
 import scipy.interpolate
 import numpy as np
 import pickle
-import bolom
+from minimint import bolom, utils
 import glob
 import os
 
@@ -75,7 +75,11 @@ def grid1d_filler(arr):
                                                         k=1)(xids1)
 
 
-def prepare(eep_prefix, outp_prefix):
+def prepare(eep_prefix, bolom_prefix, outp_prefix=None, 
+            filters=('SDSSugriz', 'SkyMapper', 'UBVRIplus', 'DECam', 'WISE')):
+
+    if outp_prefix is None:
+        outp_prefix = utils.get_data_path()
     read_grid(eep_prefix, outp_prefix)
     tab = atpy.Table().read(outp_prefix + '/' + TRACKS_FILE)
 
@@ -108,9 +112,10 @@ def prepare(eep_prefix, outp_prefix):
     np.save(outp_prefix + '/' + LOGAGE_FILE, logage_grid)
     with open(outp_prefix + '/' + INTERP_PKL, 'wb') as fp:
         pickle.dump(dict(umass=umass, ufeh=ufeh, neep=neep), fp)
+    bolom.prepare(bolom_prefix, outp_prefix, filters)
 
 
-class Interpolator:
+class TheoryInterpolator:
     def __init__(self, prefix):
         self.logg_grid = np.load(prefix + '/' + LOGG_FILE)
         self.logl_grid = np.load(prefix + '/' + LOGL_FILE)
@@ -184,8 +189,10 @@ class Interpolator:
         return ret
 
 
-class FullInterpolator:
+class Interpolator:
     def __init__(self, filts, prefix=None):
+        if prefix is None:
+            prefix = utils.get_data_path()
         self.isoInt = Interpolator(prefix)
         self.bolomInt = bolom.BCInterpolator(prefix, filts)
 

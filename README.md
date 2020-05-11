@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/segasai/minimint.svg?branch=master)](https://travis-ci.com/segasai/minimint)
+
 Minimint Software to do simple interpolation of MIST isochrones
 (Mini MIST Interpolation)
 

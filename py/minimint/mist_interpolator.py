@@ -229,6 +229,7 @@ class Interpolator:
 
         """
         mass, logage, feh = [np.asarray(_) for _ in [mass,logage,feh]]
+        mass, logage, feh = np.broadcast_arrays(mass,logage,feh)
         shape = mass.shape
         mass, logage, feh = [np.atleast_1d(_) for _ in [mass,logage,feh]]
         ret1 = self.isoInt(mass, logage, feh)

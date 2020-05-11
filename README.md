@@ -1,15 +1,23 @@
+Minimint Software to do simple interpolation of MIST isochrones
+(Mini MIST Interpolation)
+
+# Preparation 
+
+* Install minimint  (clone the repo and do pip install) 
+* Download the EEP files from MIST and the bolometric corrections
+* Create the necessary preprocessed files by running 
+
+``` minimint.prepare('FOLDER_WITH_EEP', 'FOLDER_WITH_BC')```
+That will process the evolutionary tracks and bolometric corrections
+
+Now you can use it. 
+
 To create an interpolator 
 
-ii = mist_interpolator.FullInterpolator(['DECam_g','DECam_r'],'data/')          
+```i = minimint.Interpolator(['DECam_g','DECam_r'])```
 
 Then you just call it 
-
-ii(mass, logage,feh)
+``` ii(mass, logage,feh)``` 
 
 And you get a dictionary with photometry and logg,logteff,logl
 
-
-to prepare you need the folder with EEPs 
-and folder with unzipped bolometric correction
-mist_interpolation.prepare('folder_with EEPS', 'data/'x)
-bolom.prepare('mist_bolom/','data/') 

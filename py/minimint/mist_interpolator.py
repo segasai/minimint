@@ -94,6 +94,7 @@ def prepare(eep_prefix, bolom_prefix, outp_prefix=None,
     read_grid(eep_prefix, outp_prefix)
     print ('Processing EEPs')
     tab = atpy.Table().read(outp_prefix + '/' + TRACKS_FILE)
+    os.unlink(outp_prefix + '/' + TRACKS_FILE) # remove after reading
 
     umass, mass_id = np.unique(tab['initial_mass'], return_inverse=True)
     ufeh, feh_id = np.unique(tab['feh'], return_inverse=True)

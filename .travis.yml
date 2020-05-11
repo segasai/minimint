@@ -14,7 +14,9 @@ script:
   - for a in *txz ; do tar xfJ $a ; done
   - cd ..
   - mkdir BC
+  - cd BC
   - wget -i ../tests/bc.list
   - for a in *txz ; do tar xfJ $a ; done
-  - cd ../tests;
+  - cd ..
+  - cd tests
   - pytest

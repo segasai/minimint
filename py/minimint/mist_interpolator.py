@@ -41,7 +41,10 @@ def read_grid(eep_prefix, outp_prefix):
     tab0 = atpy.Table().read('/tmp/xx.tmp',
                              format='ascii.fast_commented_header')
     tabs = []
-    for f in fs:
+    N = len(fs)
+    for i, f in enumerate(fs):
+        if i%(N//100)==0:
+            print ('%d/%d'%(i,N))
         curt = atpy.Table().read(f, format='ascii')
         for i, k in enumerate(list(curt.columns)):
             curt.rename_column(k, list(tab0.columns)[i])
@@ -80,7 +83,9 @@ def prepare(eep_prefix, bolom_prefix, outp_prefix=None,
 
     if outp_prefix is None:
         outp_prefix = utils.get_data_path()
+    print ('Reading EEP grid')
     read_grid(eep_prefix, outp_prefix)
+    print ('Processing EEPs')
     tab = atpy.Table().read(outp_prefix + '/' + TRACKS_FILE)
 
     umass, mass_id = np.unique(tab['initial_mass'], return_inverse=True)
@@ -112,6 +117,7 @@ def prepare(eep_prefix, bolom_prefix, outp_prefix=None,
     np.save(outp_prefix + '/' + LOGAGE_FILE, logage_grid)
     with open(outp_prefix + '/' + INTERP_PKL, 'wb') as fp:
         pickle.dump(dict(umass=umass, ufeh=ufeh, neep=neep), fp)
+    print ('Reading/processing bolometric corrections')
     bolom.prepare(bolom_prefix, outp_prefix, filters)
 
 

@@ -62,7 +62,7 @@ def read_grid(eep_prefix, outp_prefix):
         if k not in ['star_age', 'star_mass',
                      'log_L', 'log_g', 'log_Teff'
                      'initial_mass', 'phase', 
-                     'feh', 'EEP']
+                     'feh', 'EEP']:
             tabs.remove_column(k)
 
     os.makedirs(outp_prefix, exist_ok=True)

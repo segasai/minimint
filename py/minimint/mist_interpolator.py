@@ -58,6 +58,13 @@ def read_grid(eep_prefix, outp_prefix):
     tabs = atpy.vstack(tabs0)
     del tabs0
     gc.collect()
+    for k in list(tabs.columns):
+        if k not in ['star_age', 'star_mass',
+                     'log_L', 'log_g', 'log_Teff'
+                     'initial_mass', 'phase', 
+                     'feh', 'EEP']
+            tabs.remove_column(k)
+
     os.makedirs(outp_prefix, exist_ok=True)
     tabs.write(outp_prefix + '/' + TRACKS_FILE, overwrite=True)
 

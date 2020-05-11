@@ -206,5 +206,3 @@ class FullInterpolator:
         for k in res.keys():
             res[k] = res[k].reshape(shape)
         return res
-
-        # teff logg feh order

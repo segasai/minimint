@@ -83,6 +83,7 @@ class Interpolator0:
 
 class BCInterpolator:
     def __init__(self, prefix, filts):
+        filts = set(filts)
         vec = np.load(prefix + '/' + POINTS_NPY)
         ndim = 4
         self.ndim = ndim

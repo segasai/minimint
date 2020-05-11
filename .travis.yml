@@ -8,15 +8,15 @@ install:
   - pip install .
 
 script:
+  - cd tests
   - mkdir EEPS
   - cd EEPS
-  - wget -i ../tests/eeps.list
+  - wget -i ../eeps.list
   - for a in *txz ; do tar xfJ $a ; done
   - cd ..
   - mkdir BC
   - cd BC
-  - wget -i ../tests/bc.list
+  - wget -i ../bc.list
   - for a in *txz ; do tar xfJ $a ; done
   - cd ..
-  - cd tests
   - pytest

@@ -5,6 +5,7 @@ import pickle
 from minimint import bolom, utils
 import glob
 import os
+import gc
 
 TRACKS_FILE = 'tracks.fits'
 LOGL_FILE = 'logl_grid.npy'
@@ -40,7 +41,7 @@ def read_grid(eep_prefix, outp_prefix):
     os.system('tail -n +12 %s | head -n 10 > /tmp/xx.tmp' % (fs[0]))
     tab0 = atpy.Table().read('/tmp/xx.tmp',
                              format='ascii.fast_commented_header')
-    tabs = []
+    tabs0 = []
     N = len(fs)
     for i, f in enumerate(fs):
         if i%(N//100)==0:
@@ -52,9 +53,11 @@ def read_grid(eep_prefix, outp_prefix):
         curt['initial_mass'] = D['initial_mass']
         curt['feh'] = D['feh']
         curt['EEP'] = np.arange(len(curt))
-        tabs.append(curt)
+        tabs0.append(curt)
 
-    tabs = atpy.vstack(tabs)
+    tabs = atpy.vstack(tabs0)
+    del tabs0
+    gc.collect()
     os.makedirs(outp_prefix, exist_ok=True)
     tabs.write(outp_prefix + '/' + TRACKS_FILE, overwrite=True)
 

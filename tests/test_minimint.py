@@ -1,5 +1,6 @@
 import minimint
-
+import numpy as np
+import sys
 
 def test_install():
     minimint.prepare('EEPS', 'BCS')

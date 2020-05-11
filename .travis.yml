@@ -19,4 +19,4 @@ script:
   - wget -i ../bc.list
   - for a in *txz ; do tar xfJ $a ; done
   - cd ..
-  - pytest
+  - pytest -s

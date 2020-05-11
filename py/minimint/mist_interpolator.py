@@ -190,13 +190,38 @@ class TheoryInterpolator:
 
 
 class Interpolator:
-    def __init__(self, filts, prefix=None):
-        if prefix is None:
-            prefix = utils.get_data_path()
-        self.isoInt = TheoryInterpolator(prefix)
-        self.bolomInt = bolom.BCInterpolator(prefix, filts)
+    def __init__(self, filts, data_prefix=None):
+        """
+        Initialize the interpolator class, specifying filter names 
+        and optionally the folder where the preprocessed isochrones lie
+
+        Parameters
+        ----------
+        filts: list
+            List of strings, such as ['DECam_g','WISE_W1']
+        data_prefix: str
+            String for the data
+
+        """
+        if data_prefix is None:
+            data_prefix = utils.get_data_path()
+        self.isoInt = TheoryInterpolator(data_prefix)
+        self.bolomInt = bolom.BCInterpolator(data_prefix, filts)
 
     def __call__(self, mass, logage, feh): 
+        """
+        Compute interpolated isochrone for a given mass log10(age) and feh
+        
+        Parameters
+        ----------
+        mass: float/numpy
+            Either scalar or vector of masses
+        logage: float/numpy
+            Either scalar or vector of log10(age)
+        feh: float/numpy
+            Either scalar or vector of [Fe/H]
+
+        """
         mass, logage, feh = [np.asarray(_) for _ in [mass,logage,feh]]
         shape = mass.shape
         mass, logage, feh = [np.atleast_1d(_) for _ in [mass,logage,feh]]

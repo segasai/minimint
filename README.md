@@ -2,6 +2,7 @@
 
 Minimint Software to do simple interpolation of MIST isochrones
 (Mini MIST Interpolation)
+Author Sergey Koposov (2020) skoposov __AT__ cmu.edu
 
 # Preparation 
 

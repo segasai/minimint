@@ -1,0 +1,20 @@
+language: python
+cache: pip
+python:
+  - "3.6"
+
+install:
+  - pip install -r requirements.txt
+  - pip install .
+
+script:
+  - mkdir EEPS
+  - cd EEPS
+  - wget -i ../tests/eeps.list
+  - for a in *txz ; do tar xfJ $a ; done
+  - cd ..
+  - mkdir BC
+  - wget -i ../tests/bc.list
+  - for a in *txz ; do tar xfJ $a ; done
+  - cd ../tests;
+  - pytest

@@ -237,7 +237,8 @@ class Interpolator:
         av = feh * 0.
         arr = np.array([logteff[xind], logg[xind], feh[xind], av[xind]]).T
         res0 = self.bolomInt(arr)
-        res = dict(logg=logg, logteff=logteff, logl=logl)
+        res = dict(logg=logg, logteff=logteff, logl=logl, mass=mass,
+                   logage=logage, feh=feh)
         for k in res0:
             res[k] = np.zeros(len(logg)) - np.nan
             res[k][xind] = 4.74 - 2.5 * (logl[xind]) - res0[k]

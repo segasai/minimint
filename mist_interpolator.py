@@ -193,7 +193,7 @@ class FullInterpolator:
         ret1 = self.isoInt(mass, logage, feh)
         logg, logteff, logl = [ret1[_] for _ in ['logg', 'logteff', 'logl']]
         xind = np.isfinite(logl)
-        av = feh*0 
+        av = feh * 0.
         arr = np.array([logteff[xind], logg[xind], feh[xind], av[xind]]).T
         res0 = self.bolomInt(arr)
         res = dict(logg=logg, logteff=logteff, logl=logl)

@@ -193,7 +193,7 @@ class Interpolator:
     def __init__(self, filts, prefix=None):
         if prefix is None:
             prefix = utils.get_data_path()
-        self.isoInt = Interpolator(prefix)
+        self.isoInt = TheoryInterpolator(prefix)
         self.bolomInt = bolom.BCInterpolator(prefix, filts)
 
     def __call__(self, mass, logage, feh): 

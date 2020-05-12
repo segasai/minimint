@@ -13,7 +13,9 @@ FILT_NPY = 'filt_%s.npy'
 
 def read_bolom(filt, iprefix):
     fs = sorted(glob.glob('%s/*%s' % (iprefix, filt)))
-    assert (len(fs) > 0)
+    if len(fs) == 0:
+        print ('Filter system %s bolometric correction not found in %s'%(filt, iprefix))
+        raise RuntimeError('err')
     cmd = 'tail -n +6 %s |head   > /tmp/xx.tmp ' % (fs[0], )
     print(cmd)
     os.system(cmd)
@@ -149,7 +151,8 @@ def list_filters(path=None):
 
 def prepare(iprefix,
             oprefix,
-            filters=('SDSSugriz', 'SkyMapper', 'UBVRIplus', 'DECam', 'WISE')):
+            filters=('SDSSugriz', 'SkyMapper', 'UBVRIplus', 'DECam', 'WISE',
+                     'GALEX')):
     cols_ex = ['Teff', 'logg', '[Fe/H]', 'Av', 'Rv']
     last_vec = None
     for i, filt in enumerate(filters):

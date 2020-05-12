@@ -70,6 +70,11 @@ def read_grid(eep_prefix, outp_prefix):
 
 
 def grid3d_filler(ima):
+    """
+    This fills nan gaps along one dimension in a 3d cube. 
+    I fill the gaps along mass dimension
+    The array is modified
+    """
     nx, ny, nz = ima.shape
     for i in range(nx):
         for k in range(nz):
@@ -77,6 +82,11 @@ def grid3d_filler(ima):
 
 
 def grid1d_filler(arr):
+    """
+    This takes a vector with gaps filled with nans.
+    It then fills the internal gaps with linear interpolation
+    Input is modified
+    """
     xids = np.nonzero(np.isfinite(arr))[0]
     left, right = xids[0], xids[-1]
     xids1 = np.arange(left, right + 1)
@@ -138,7 +148,18 @@ def prepare(eep_prefix,
 
 
 class TheoryInterpolator:
-    def __init__(self, prefix):
+    def __init__(self, prefix=None):
+        """
+        Construct the interpolator that computes theoretical 
+        quantities (logg, logl, logteff) given (mass, logage, feh)
+        
+        Parameters
+        ----------
+        prefix: str
+            Path to the data folder
+        """
+        if prefix is None:
+            prefix = utils.get_data_path()
         self.logg_grid = np.load(prefix + '/' + LOGG_FILE)
         self.logl_grid = np.load(prefix + '/' + LOGL_FILE)
         self.logteff_grid = np.load(prefix + '/' + LOGTEFF_FILE)

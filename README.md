@@ -7,7 +7,7 @@ Author Sergey Koposov (2020) skoposov __AT__ cmu.edu
 # Instructions 
 
 * Install minimint  (clone the repo and do pip install) 
-* Download the EEP files from MIST and the bolometric corrections 
+* Download the EEP track files from MIST and the bolometric corrections from http://waps.cfa.harvard.edu/MIST/model_grids.html
 * Create the necessary preprocessed files by running 
 
 ``` minimint.prepare('FOLDER_WITH_EEP', 'FOLDER_WITH_BC')```

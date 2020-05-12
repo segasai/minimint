@@ -1,8 +1,10 @@
 [![Build Status](https://travis-ci.com/segasai/minimint.svg?branch=master)](https://travis-ci.com/segasai/minimint)
 
-Minimint Software to do simple interpolation of MIST isochrones
-(Mini MIST Interpolation)
-Author Sergey Koposov (2020) skoposov __AT__ cmu.edu
+Minimint (MIni Mist INTerpolation)
+
+Software to do simple interpolation of MIST isochrones
+
+Author: Sergey Koposov (2020) skoposov __AT__ cmu.edu
 
 # Instructions 
 
@@ -15,16 +17,15 @@ Author Sergey Koposov (2020) skoposov __AT__ cmu.edu
 That will process the evolutionary tracks and bolometric corrections by creating the necessary 
 files for the package.
 
-Now you can use the package 
-
-To create an interpolator 
+Now you can use the package. In order to create an interpolator object:
 
 ```i = minimint.Interpolator(['DECam_g','DECam_r'])```
 
-Then you just call it 
+The interpolator is a callable, so you can call it on mass, log10(age), feh 
+
 ``` ii(mass, logage,feh)``` 
  
-And you get a dictionary with photometry and logg,logteff,logl
+This returns a dictionary with photometry and logg, logteff, logl and photometry.
 
 ## Examples 
 

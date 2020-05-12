@@ -91,7 +91,8 @@ def grid1d_filler(arr):
 def prepare(eep_prefix,
             bolom_prefix,
             outp_prefix=None,
-            filters=('SDSSugriz', 'SkyMapper', 'UBVRIplus', 'DECam', 'WISE')):
+            filters=('DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper',
+                     'UBVRIplus', 'WISE')):
 
     if outp_prefix is None:
         outp_prefix = utils.get_data_path()

@@ -44,8 +44,8 @@ def read_grid(eep_prefix, outp_prefix):
     tabs0 = []
     N = len(fs)
     for i, f in enumerate(fs):
-        if i%(N//100)==0:
-            print ('%d/%d'%(i,N))
+        if i % (N // 100) == 0:
+            print('%d/%d' % (i, N))
         curt = atpy.Table().read(f, format='ascii')
         for i, k in enumerate(list(curt.columns)):
             curt.rename_column(k, list(tab0.columns)[i])
@@ -59,20 +59,22 @@ def read_grid(eep_prefix, outp_prefix):
     del tabs0
     gc.collect()
     for k in list(tabs.columns):
-        if k not in ['star_age', 'star_mass',
-                     'log_L', 'log_g', 'log_Teff',
-                     'initial_mass', 'phase', 
-                     'feh', 'EEP']:
+        if k not in [
+                'star_age', 'star_mass', 'log_L', 'log_g', 'log_Teff',
+                'initial_mass', 'phase', 'feh', 'EEP'
+        ]:
             tabs.remove_column(k)
 
     os.makedirs(outp_prefix, exist_ok=True)
     tabs.write(outp_prefix + '/' + TRACKS_FILE, overwrite=True)
+
 
 def grid3d_filler(ima):
     nx, ny, nz = ima.shape
     for i in range(nx):
         for k in range(nz):
             grid1d_filler(ima[i, :, k])
+
 
 def grid1d_filler(arr):
     xids = np.nonzero(np.isfinite(arr))[0]
@@ -85,16 +87,19 @@ def grid1d_filler(arr):
                                                         s=0,
                                                         k=1)(xids1)
 
-def prepare(eep_prefix, bolom_prefix, outp_prefix=None, 
+
+def prepare(eep_prefix,
+            bolom_prefix,
+            outp_prefix=None,
             filters=('SDSSugriz', 'SkyMapper', 'UBVRIplus', 'DECam', 'WISE')):
 
     if outp_prefix is None:
         outp_prefix = utils.get_data_path()
-    print ('Reading EEP grid')
+    print('Reading EEP grid')
     read_grid(eep_prefix, outp_prefix)
-    print ('Processing EEPs')
+    print('Processing EEPs')
     tab = atpy.Table().read(outp_prefix + '/' + TRACKS_FILE)
-    os.unlink(outp_prefix + '/' + TRACKS_FILE) # remove after reading
+    os.unlink(outp_prefix + '/' + TRACKS_FILE)  # remove after reading
 
     umass, mass_id = np.unique(tab['initial_mass'], return_inverse=True)
     ufeh, feh_id = np.unique(tab['feh'], return_inverse=True)
@@ -109,6 +114,7 @@ def prepare(eep_prefix, bolom_prefix, outp_prefix=None,
     logl_grid = np.zeros((nfeh, nmass, neep)) - np.nan
 
     logage_grid[feh_id, mass_id, tab['EEP']] = np.log10(tab['star_age'])
+    logage_grid[:, :, 1:] = np.diff(logage_grid, axis=2)
     logg_grid[feh_id, mass_id, tab['EEP']] = tab['log_g']
     logteff_grid[feh_id, mass_id, tab['EEP']] = tab['log_Teff']
     logl_grid[feh_id, mass_id, tab['EEP']] = tab['log_L']
@@ -118,6 +124,7 @@ def prepare(eep_prefix, bolom_prefix, outp_prefix=None,
         grid3d_filler(logteff_grid)
         grid3d_filler(logl_grid)
         grid3d_filler(logage_grid)
+    logage_grid[:, :, :] = np.cumsum(logage_grid, axis=2)
 
     np.save(outp_prefix + '/' + LOGG_FILE, logg_grid)
     np.save(outp_prefix + '/' + LOGL_FILE, logl_grid)
@@ -125,7 +132,7 @@ def prepare(eep_prefix, bolom_prefix, outp_prefix=None,
     np.save(outp_prefix + '/' + LOGAGE_FILE, logage_grid)
     with open(outp_prefix + '/' + INTERP_PKL, 'wb') as fp:
         pickle.dump(dict(umass=umass, ufeh=ufeh, neep=neep), fp)
-    print ('Reading/processing bolometric corrections')
+    print('Reading/processing bolometric corrections')
     bolom.prepare(bolom_prefix, outp_prefix, filters)
 
 
@@ -222,7 +229,7 @@ class Interpolator:
         self.isoInt = TheoryInterpolator(data_prefix)
         self.bolomInt = bolom.BCInterpolator(data_prefix, filts)
 
-    def __call__(self, mass, logage, feh): 
+    def __call__(self, mass, logage, feh):
         """
         Compute interpolated isochrone for a given mass log10(age) and feh
         
@@ -236,18 +243,22 @@ class Interpolator:
             Either scalar or vector of [Fe/H]
 
         """
-        mass, logage, feh = [np.asarray(_) for _ in [mass,logage,feh]]
-        mass, logage, feh = np.broadcast_arrays(mass,logage,feh)
+        mass, logage, feh = [np.asarray(_) for _ in [mass, logage, feh]]
+        mass, logage, feh = np.broadcast_arrays(mass, logage, feh)
         shape = mass.shape
-        mass, logage, feh = [np.atleast_1d(_) for _ in [mass,logage,feh]]
+        mass, logage, feh = [np.atleast_1d(_) for _ in [mass, logage, feh]]
         ret1 = self.isoInt(mass, logage, feh)
         logg, logteff, logl = [ret1[_] for _ in ['logg', 'logteff', 'logl']]
         xind = np.isfinite(logl)
         av = feh * 0.
         arr = np.array([logteff[xind], logg[xind], feh[xind], av[xind]]).T
         res0 = self.bolomInt(arr)
-        res = dict(logg=logg, logteff=logteff, logl=logl, mass=mass,
-                   logage=logage, feh=feh)
+        res = dict(logg=logg,
+                   logteff=logteff,
+                   logl=logl,
+                   mass=mass,
+                   logage=logage,
+                   feh=feh)
         for k in res0:
             res[k] = np.zeros(len(logg)) - np.nan
             res[k][xind] = 4.74 - 2.5 * (logl[xind]) - res0[k]

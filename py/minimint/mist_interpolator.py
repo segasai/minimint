@@ -269,8 +269,22 @@ class Interpolator:
         mass, logage, feh = np.broadcast_arrays(mass, logage, feh)
         shape = mass.shape
         mass, logage, feh = [np.atleast_1d(_) for _ in [mass, logage, feh]]
-        ret1 = self.isoInt(mass, logage, feh)
-        logg, logteff, logl = [ret1[_] for _ in ['logg', 'logteff', 'logl']]
+        maxn = int(1e4)
+        curl = len(mass)
+        keys = ['logg', 'logteff', 'logl']
+        # split if many are asked
+        if curl > maxn:
+            nsplits = np.ceil(curl * 1. / maxn)
+            rets = []
+            ret1 = {}
+            for i in range(nsplits):
+                cursl = slice(i*maxn,(i+1)*maxn)
+                rets.append(self.isoInt(mass[cursl], logage[cursl], feh[cursl]))
+            for k in keys:
+                ret1[k] = np.concatenate([_[k] for _ in rets])
+        else:
+            ret1 = self.isoInt(mass, logage, feh)
+        logg, logteff, logl = [ret1[_] for _ in keys]
         xind = np.isfinite(logl)
         av = feh * 0.
         arr = np.array([logteff[xind], logg[xind], feh[xind], av[xind]]).T

@@ -274,7 +274,7 @@ class Interpolator:
         keys = ['logg', 'logteff', 'logl']
         # split if many are asked
         if curl > maxn:
-            nsplits = np.ceil(curl * 1. / maxn)
+            nsplits = int(np.ceil(curl * 1. / maxn))
             rets = []
             ret1 = {}
             for i in range(nsplits):

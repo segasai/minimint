@@ -33,12 +33,12 @@ def getheader(f):
     D['N_EEP'] = int(vals[2])
     D['type'] = (vals[5])
     return D
-
+            
 
 def read_grid(eep_prefix, outp_prefix):
     fs = glob.glob('%s/*EEPS/*eep' % (eep_prefix, ))
     assert (len(fs) > 0)
-    os.system('tail -n +12 %s | head -n 10 > /tmp/xx.tmp' % (fs[0]))
+    utils.tail_head(fs[0], '/tmp/xx.tmp', 11, 10)
     tab0 = atpy.Table().read('/tmp/xx.tmp',
                              format='ascii.fast_commented_header')
     tabs0 = []
@@ -116,7 +116,7 @@ def prepare(eep_prefix,
     if outp_prefix is None:
         outp_prefix = utils.get_data_path()
     print('Reading EEP grid')
-    if not os.path.isdir(eep_prefix) or not os.path.isdir(outp_prefox):
+    if not os.path.isdir(eep_prefix) or not os.path.isdir(outp_prefix):
         raise RuntimeError('The arguments must be paths to the directories with *EEP and bolometric corrections')
     read_grid(eep_prefix, outp_prefix)
     print('Processing EEPs')

@@ -16,10 +16,7 @@ def read_bolom(filt, iprefix):
     if len(fs) == 0:
         print ('Filter system %s bolometric correction not found in %s'%(filt, iprefix))
         raise RuntimeError('err')
-    cmd = 'tail -n +6 %s |head   > /tmp/xx.tmp ' % (fs[0], )
-    print(cmd)
-    os.system(cmd)
-
+    utils.tail_head(fs[0], '/tmp/xx.tmp', 5, 10)
     tab0 = atpy.Table().read('/tmp/xx.tmp',
                              format='ascii.fast_commented_header')
 

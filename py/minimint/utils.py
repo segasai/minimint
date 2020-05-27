@@ -1,6 +1,6 @@
 import os
 import pathlib
-
+import tempfile
 
 def get_data_path():
     path = os.environ.get('MINIMINT_DATA_PATH')
@@ -11,10 +11,13 @@ def get_data_path():
     return path
 
 
-def tail_head(fin, fout, nskip, nout):
-    # read nout lines from fin after skipping nskip lines and put output in fout
+def tail_head(fin, nskip, nout):
+    """ 
+    Read nout lines from fin after skipping nskip lines 
+    and put output in the temporary file. Return filename
+    """
     fp = open(fin, 'r')
-    fpout = open(fout, 'w')
+    fpout = tempfile.NamedTemporaryFile(delete=False, mode='w')
     i = -1
     for l in fp:
         i += 1
@@ -25,3 +28,4 @@ def tail_head(fin, fout, nskip, nout):
             break
     fp.close()
     fpout.close()
+    return fpout.name

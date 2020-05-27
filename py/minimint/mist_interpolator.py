@@ -38,9 +38,10 @@ def getheader(f):
 def read_grid(eep_prefix, outp_prefix):
     fs = glob.glob('%s/*EEPS/*eep' % (eep_prefix, ))
     assert (len(fs) > 0)
-    utils.tail_head(fs[0], '/tmp/xx.tmp', 11, 10)
-    tab0 = atpy.Table().read('/tmp/xx.tmp',
+    tmpfile = utils.tail_head(fs[0], 11, 10)
+    tab0 = atpy.Table().read(tmpfile,
                              format='ascii.fast_commented_header')
+    os.unlink(tmpfile)
     tabs0 = []
     N = len(fs)
     for i, f in enumerate(fs):

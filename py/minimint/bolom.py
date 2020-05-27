@@ -16,10 +16,10 @@ def read_bolom(filt, iprefix):
     if len(fs) == 0:
         print ('Filter system %s bolometric correction not found in %s'%(filt, iprefix))
         raise RuntimeError('err')
-    tail_head(fs[0], '/tmp/xx.tmp', 5, 10)
-    tab0 = atpy.Table().read('/tmp/xx.tmp',
+    tmpfile = tail_head(fs[0], 5, 10)
+    tab0 = atpy.Table().read(tmpfile,
                              format='ascii.fast_commented_header')
-
+    os.unlink(tmpfile)
     tabs = []
     for f in fs:
         curt = atpy.Table().read(f, format='ascii')

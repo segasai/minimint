@@ -103,10 +103,21 @@ def prepare(eep_prefix,
             outp_prefix=None,
             filters=('DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper',
                      'UBVRIplus', 'WISE')):
-
+    """
+    Prepare the isochrone files 
+    
+    Parameters
+    ----------
+    eep_prefix: string
+        The path that has *EEP folders where *eep files will be searched
+    bolom_prefix: string
+        The path that has bolometric correction files *DECam *UBRI etc
+    """
     if outp_prefix is None:
         outp_prefix = utils.get_data_path()
     print('Reading EEP grid')
+    if not os.path.isdir(eep_prefix) or not os.path.isdir(outp_prefox):
+        raise RuntimeError('The arguments must be paths to the directories with *EEP and bolometric corrections')
     read_grid(eep_prefix, outp_prefix)
     print('Processing EEPs')
     tab = atpy.Table().read(outp_prefix + '/' + TRACKS_FILE)

@@ -20,7 +20,7 @@ def tail_head(fin, fout, nskip, nout):
         i += 1
         if i < nskip:
             continue
-        print(fpout, file=fpout)
+        print(l, file=fpout)
         if i == (nskip + nout):
             break
     fp.close()

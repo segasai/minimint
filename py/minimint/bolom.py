@@ -6,7 +6,7 @@ import scipy.interpolate
 import scipy.spatial
 import astropy.table as atpy
 import numpy as np
-from .utils import get_data_path
+from .utils import get_data_path, tail_head
 
 POINTS_NPY = 'bolom_points.npy'
 FILT_NPY = 'filt_%s.npy'
@@ -16,7 +16,7 @@ def read_bolom(filt, iprefix):
     if len(fs) == 0:
         print ('Filter system %s bolometric correction not found in %s'%(filt, iprefix))
         raise RuntimeError('err')
-    utils.tail_head(fs[0], '/tmp/xx.tmp', 5, 10)
+    tail_head(fs[0], '/tmp/xx.tmp', 5, 10)
     tab0 = atpy.Table().read('/tmp/xx.tmp',
                              format='ascii.fast_commented_header')
 

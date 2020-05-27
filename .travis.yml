@@ -5,6 +5,7 @@ python:
 
 install:
   - pip install -r requirements.txt
+  - pip install pytest-cov
   - pip install .
 
 script:
@@ -19,4 +20,6 @@ script:
   - wget -i ../bc.list
   - for a in *txz ; do tar xfJ $a ; done
   - cd ..
-  - pytest -s
+  - pytest --cov -s
+
+after_success: coveralls

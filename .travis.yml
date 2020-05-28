@@ -21,6 +21,6 @@ script:
   - wget -i ../bc.list
   - for a in *txz ; do tar xfJ $a ; done
   - cd ..
-  - pytest --cov=py/ -s
+  - pytest --cov=minimist -s
 
 after_success: coveralls

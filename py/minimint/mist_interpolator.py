@@ -124,8 +124,8 @@ def prepare(eep_prefix,
     tab = atpy.Table().read(outp_prefix + '/' + TRACKS_FILE)
     os.unlink(outp_prefix + '/' + TRACKS_FILE)  # remove after reading
 
-    umass, mass_id = np.unique(tab['initial_mass'], return_inverse=True)
-    ufeh, feh_id = np.unique(tab['feh'], return_inverse=True)
+    umass, mass_id = np.unique(np.array(tab['initial_mass']), return_inverse=True)
+    ufeh, feh_id = np.unique(np.array(tab['feh']), return_inverse=True)
 
     neep = 1710
     nfeh = len(ufeh)
@@ -178,8 +178,8 @@ class TheoryInterpolator:
         self.logage_grid = np.load(prefix + '/' + LOGAGE_FILE)
         with open(prefix + '/' + INTERP_PKL, 'rb') as fp:
             D = pickle.load(fp)
-            self.umass = D['umass']
-            self.ufeh = D['ufeh']
+            self.umass = np.array(D['umass'])
+            self.ufeh = np.array(D['ufeh'])
             self.neep = D['neep']
 
     def __call__(self, mass, logage, feh):

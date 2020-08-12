@@ -15,28 +15,18 @@ git clone https://github.com/segasai/minimint.git
 pip install ./minimint
 ```
 
-* Download and unpack EEP track files from MIST and the bolometric corrections for filter systems that you need from http://waps.cfa.harvard.edu/MIST/model_grids.html
-i.e. 
+* Download and prepare isochrone files 
 ```
-wget http://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/MIST_v1.2_vvcrit0.4_UBVRIplus.txz
-wget http://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/MIST_v1.2_vvcrit0.4_DECam.txz
-...
-wget http://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/MIST_v1.2_feh_m4.00_afe_p0.0_vvcrit0.4_EEPS.txz
-wget http://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/MIST_v1.2_feh_m3.50_afe_p0.0_vvcrit0.4_EEPS.txz
-...
+minimint.download_and_prepare()
 ```
 
-* Create the necessary preprocessed files by running 
+That will download everything and process the evolutionary tracks and bolometric corrections by creating the necessary  files for the package.
 
-``` minimint.prepare('FOLDER_WITH_EEP', 'FOLDER_WITH_BC')```
-
-That will process the evolutionary tracks and bolometric corrections by creating the necessary  files for the package.
-
-minimint.prepare by default creates bolometric corrections for these 
+minimint.download_and_prepare() by by default creates bolometric corrections for these filters
 'DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper','UBVRIplus', 'WISE'
 If you need additional filters, you can specify them using the filters parameter
 
-``` minimint.prepare('FOLDER_WITH_EEP', 'FOLDER_WITH_BC', filters=['JWST','WISE'])```
+``` minimint.download_and_prepare(filters=['JWST','WISE','DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper','UBVRIplus'])```
 
 
 Now you can use the package. In order to create an interpolator object:

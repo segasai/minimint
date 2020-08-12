@@ -118,20 +118,20 @@ def download_and_prepare(filters=[
         Temporary directory for storing downloaded files
     """
 
-    bc_url = lambda x: 'https://waps.cfa.harvard.edu/MIST/BC_tables/%s.txz'%x
+    bc_url = lambda x: 'https://waps.cfa.harvard.edu/MIST/BC_tables/%s.txz' % x
     eep_url = lambda x: 'https://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/MIST_v1.2_feh_%s_afe_p0.0_vvcrit0.4_EEPS.txz' % x
     mets = 'm4.00,m3.50,m3.00,m2.50,m2.00,m1.75,m1.50,m1.25,m1.00,m0.75,m0.50,m0.25,p0.00,p0.25,p0.50'.split(
         ',')
 
     def writer(url, pref):
-        print (url)
+        print('Downloading', url)
         fd = urllib.request.urlopen(url)
         fname = url.split('/')[-1]
         fdout = open(pref + '/' + fname, 'wb')
         fdout.write(fd.read())
         fdout.close()
         fd.close()
-        cmd = 'cd %s; tar xfJ %s'%(pref, fname)
+        cmd = 'cd %s; tar xfJ %s' % (pref, fname)
         os.system(cmd)
 
     with tempfile.TemporaryDirectory(dir=tmp_prefix) as T:

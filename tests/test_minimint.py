@@ -4,7 +4,7 @@ import sys
 
 
 def test_install():
-    minimint.prepare('EEPS', 'BCS')
+    minimint.download_and_prepare()
 
 
 def test_run():

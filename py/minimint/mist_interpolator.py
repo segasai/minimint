@@ -1,11 +1,13 @@
-import astropy.table as atpy
-import scipy.interpolate
-import numpy as np
-import pickle
-from minimint import bolom, utils
+import urllib.request
+import tempfile
 import glob
 import os
 import gc
+import pickle
+import astropy.table as atpy
+import scipy.interpolate
+import numpy as np
+from minimint import bolom, utils
 
 TRACKS_FILE = 'tracks.fits'
 LOGL_FILE = 'logl_grid.npy'
@@ -33,14 +35,13 @@ def getheader(f):
     D['N_EEP'] = int(vals[2])
     D['type'] = (vals[5])
     return D
-            
+
 
 def read_grid(eep_prefix, outp_prefix):
     fs = glob.glob('%s/*EEPS/*eep' % (eep_prefix, ))
     assert (len(fs) > 0)
     tmpfile = utils.tail_head(fs[0], 11, 10)
-    tab0 = atpy.Table().read(tmpfile,
-                             format='ascii.fast_commented_header')
+    tab0 = atpy.Table().read(tmpfile, format='ascii.fast_commented_header')
     os.unlink(tmpfile)
     tabs0 = []
     N = len(fs)
@@ -99,6 +100,48 @@ def grid1d_filler(arr):
                                                         k=1)(xids1)
 
 
+def download_and_prepare(filters=[
+    'DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper', 'UBVRIplus',
+    'WISE'
+],
+                         outp_prefix=None,
+                         tmp_prefix=None):
+    """ Download the MIST isochrones and prepare the prerocessed isochrones
+    Parameters
+
+    ----------
+    filters: tuple
+        List of filter systems ['DECam','GALEX',...']
+    outp_prefix: string (optional)
+        Output directory for processed files
+    tmp_prefix: string (optional)
+        Temporary directory for storing downloaded files
+    """
+
+    bc_url = lambda x: 'https://waps.cfa.harvard.edu/MIST/BC_tables/%s.txz'%x
+    eep_url = lambda x: 'https://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/MIST_v1.2_feh_%s_afe_p0.0_vvcrit0.4_EEPS.txz' % x
+    mets = 'm4.00,m3.50,m3.00,m2.50,m2.00,m1.75,m1.50,m1.25,m1.00,m0.75,m0.50,m0.25,p0.00,p0.25,p0.50'.split(
+        ',')
+
+    def writer(url, pref):
+        print (url)
+        fd = urllib.request.urlopen(url)
+        fname = url.split('/')[-1]
+        fdout = open(pref + '/' + fname, 'wb')
+        fdout.write(fd.read())
+        fdout.close()
+        fd.close()
+        cmd = 'cd %s; tar xfJ %s'%(pref, fname)
+        os.system(cmd)
+
+    with tempfile.TemporaryDirectory(dir=tmp_prefix) as T:
+        for curfilt in filters:
+            writer(bc_url(curfilt), T)
+        for curmet in mets:
+            writer(eep_url(curmet), T)
+        prepare(T, T, outp_prefix=outp_prefix, filters=filters)
+
+
 def prepare(eep_prefix,
             bolom_prefix,
             outp_prefix=None,
@@ -118,13 +161,16 @@ def prepare(eep_prefix,
         outp_prefix = utils.get_data_path()
     print('Reading EEP grid')
     if not os.path.isdir(eep_prefix) or not os.path.isdir(outp_prefix):
-        raise RuntimeError('The arguments must be paths to the directories with *EEP and bolometric corrections')
+        raise RuntimeError(
+            'The arguments must be paths to the directories with *EEP and bolometric corrections'
+        )
     read_grid(eep_prefix, outp_prefix)
     print('Processing EEPs')
     tab = atpy.Table().read(outp_prefix + '/' + TRACKS_FILE)
     os.unlink(outp_prefix + '/' + TRACKS_FILE)  # remove after reading
 
-    umass, mass_id = np.unique(np.array(tab['initial_mass']), return_inverse=True)
+    umass, mass_id = np.unique(np.array(tab['initial_mass']),
+                               return_inverse=True)
     ufeh, feh_id = np.unique(np.array(tab['feh']), return_inverse=True)
 
     neep = 1710
@@ -290,8 +336,9 @@ class Interpolator:
             rets = []
             ret1 = {}
             for i in range(nsplits):
-                cursl = slice(i*maxn,(i+1)*maxn)
-                rets.append(self.isoInt(mass[cursl], logage[cursl], feh[cursl]))
+                cursl = slice(i * maxn, (i + 1) * maxn)
+                rets.append(self.isoInt(mass[cursl], logage[cursl],
+                                        feh[cursl]))
             for k in keys:
                 ret1[k] = np.concatenate([_[k] for _ in rets])
         else:

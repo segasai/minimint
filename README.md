@@ -10,8 +10,10 @@ Author: Sergey Koposov (2020) skoposov __AT__ ed __DOT__ ac __DOT__ uk
 # Instructions 
 
 * Install minimint  (clone the repo and do pip install) 
-```git clone https://github.com/segasai/minimint.git
-pip install ./minimint```
+```
+git clone https://github.com/segasai/minimint.git
+pip install ./minimint
+```
 
 * Download and unpack EEP track files from MIST and the bolometric corrections for filter systems that you need from http://waps.cfa.harvard.edu/MIST/model_grids.html
 i.e. 
@@ -22,8 +24,8 @@ wget http://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/MIST_v1.2_vvcrit0.4_DEC
 wget http://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/MIST_v1.2_feh_m4.00_afe_p0.0_vvcrit0.4_EEPS.txz
 wget http://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/MIST_v1.2_feh_m3.50_afe_p0.0_vvcrit0.4_EEPS.txz
 ...
-
 ```
+
 * Create the necessary preprocessed files by running 
 
 ``` minimint.prepare('FOLDER_WITH_EEP', 'FOLDER_WITH_BC')```

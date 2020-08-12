@@ -27,6 +27,7 @@ minimint.download_and_prepare() by by default creates bolometric corrections for
 If you need additional filters, you can specify them using the filters parameter
 
 ``` minimint.download_and_prepare(filters=['JWST','WISE','DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper','UBVRIplus'])```
+This will take some time (20-30 min) and will use some space (10-30Gb).
 
 
 Now you can use the package. In order to create an interpolator object:

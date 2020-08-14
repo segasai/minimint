@@ -27,6 +27,7 @@ minimint.download_and_prepare() by by default creates bolometric corrections for
 If you need additional filters, you can specify them using the filters parameter
 
 ``` minimint.download_and_prepare(filters=['JWST','WISE','DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper','UBVRIplus'])```
+Check which filters are available on the MIST website http://waps.cfa.harvard.edu/MIST/model_grids.html
 This will take some time (20-30 min) and will use some space (10-30Gb).
 
 

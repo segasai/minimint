@@ -21,9 +21,13 @@ def get_revision():
                                   bufsize=80,
                                   stdout=subprocess.PIPE).stdout
         revision = tmpout.read().decode()[:6]
-        return '-dev'+revision
+        if len(revision) > 0:
+            ret = '.dev' + revision
+        else:
+            ret = ''
     except:
-        return ''
+        ret= ''
+    return ret
 
 
 # Utility function to read the README file.

@@ -11,8 +11,7 @@ Author: Sergey Koposov (2020) skoposov __AT__ ed __DOT__ ac __DOT__ uk
 
 * Install minimint  (clone the repo and do pip install) 
 ```
-git clone https://github.com/segasai/minimint.git
-pip install ./minimint
+pip install minimint
 ```
 
 * Download and prepare isochrone files 

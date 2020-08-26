@@ -10,6 +10,7 @@ Author: Sergey Koposov (2020) skoposov __AT__ ed __DOT__ ac __DOT__ uk
 # Instructions 
 
 * Install minimint  (clone the repo and do pip install) 
+
 ```
 git clone https://github.com/segasai/minimint.git
 pip install ./minimint

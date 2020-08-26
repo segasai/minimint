@@ -21,7 +21,7 @@ def get_revision():
                                   bufsize=80,
                                   stdout=subprocess.PIPE).stdout
         revision = tmpout.read().decode()[:6]
-        return revision
+        return '-dev'+revision
     except:
         return ''
 
@@ -34,19 +34,17 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 
-VERSIONPIP = '0.0.1'
-#VERSIONPIP=read('version.txt').rstrip()
-print(get_revision())
-VERSION = VERSIONPIP + 'dev' + get_revision()
+VERSIONPIP=read('version.txt').rstrip()
+VERSION = VERSIONPIP + get_revision()
 
-#with open('py/rvspecfit/_version.py', 'w') as fp:
-#    print('version="%s"' % (VERSION), file=fp)
+with open('py/minimint/_version.py', 'w') as fp:
+    print('version="%s"' % (VERSION), file=fp)
 
 setup(
     name="minimint",
     version=VERSION,
     author="Sergey Koposov",
-    author_email="skoposov@cmu.edu",
+    author_email="skoposov@ed.ac.uk",
     description=("MIST interpolation"),
     license="BSD",
     keywords="example documentation tutorial",

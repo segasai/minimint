@@ -250,6 +250,7 @@ class TheoryInterpolator:
                                         )  # from 0 to 1
         y = (mass - self.umass[l1mass]) / (
             self.umass[l2mass] - self.umass[l1mass])  # from 0 to 1
+        # this is now bilinear interpolation in the space of mass/metallicity
         C1 = (1 - x) * (1 - y)
         C2 = (1 - x) * y
         C3 = x * (1 - y)

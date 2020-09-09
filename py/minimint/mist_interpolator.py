@@ -262,12 +262,17 @@ class TheoryInterpolator:
                 self.logl_grid
             ]
         ]
+        # these arrays now have star id as first axis
+        # and then store the age, logg, logteff, logl for a given mass star
+        # as a function of EEP
+        
         large = 1e100
         logage_new[~np.isfinite(logage_new)] = large
         maxep = (np.isfinite(logage_new) *
                  np.arange(self.neep)[None, :]).max(axis=1)
         pos1 = np.zeros(len(logage), dtype=int)
 
+        # here we are finding the EEP point with the right age
         for i in range(len(logage)):
             pos1[i] = np.searchsorted(logage_new[i, :], logage[i]) - 1
         # this needs to be sped up
@@ -279,7 +284,7 @@ class TheoryInterpolator:
         ids = np.arange(len(logage))
         x1 = (logage - logage_new[ids, pos1]) / (logage_new[ids, pos2] -
                                                  logage_new[ids, pos1])
-
+        # perfoming the linear interpolation with age
         ret = [
             _[ids, pos1] + x1 * (_[ids, pos2] - _[ids, pos1])
             for _ in [logg_new, logteff_new, logl_new]

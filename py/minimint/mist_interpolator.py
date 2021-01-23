@@ -239,7 +239,29 @@ class TheoryInterpolator:
         feh, mass, logage = [
             np.atleast_1d(np.asarray(_)) for _ in [feh, mass, logage]
         ]
-        # print (age)
+
+        DD = self.__get_eep_coeffs(mass, logage, feh)
+        C1, C2, C3, C4 = (DD['C1'], DD['C2'], DD['C3'], DD['C4'])
+        l1feh, l2feh, l1mass, l2mass = (DD['l1feh'], DD['l2feh'], DD['l1mass'],
+                                        DD['l2mass'])
+        pos1, pos2, x1, bad = DD['pos1'], DD['pos2'], DD['x1'], DD['bad']
+        ids = DD['ids']
+        logg_new, logteff_new, logl_new = [
+            (C1[:, None] * _[l1feh, l1mass] + C2[:, None] * _[l1feh, l2mass] +
+             C3[:, None] * _[l2feh, l1mass] + C4[:, None] * _[l2feh, l2mass])
+            for _ in [self.logg_grid, self.logteff_grid, self.logl_grid]
+        ]
+        # perfoming the linear interpolation with age
+        ret = [
+            _[ids, pos1] + x1 * (_[ids, pos2] - _[ids, pos1])
+            for _ in [logg_new, logteff_new, logl_new]
+        ]
+        ret = {'logg': ret[0], 'logteff': ret[1], 'logl': ret[2]}
+        for k in ['logg', 'logteff', 'logl']:
+            ret[k][bad] = np.nan
+        return ret
+
+    def __get_eep_coeffs(self, mass, logage, feh):
         l1feh = np.searchsorted(self.ufeh, feh) - 1
         l2feh = l1feh + 1
         l1mass = np.searchsorted(self.umass, mass) - 1
@@ -261,14 +283,11 @@ class TheoryInterpolator:
         C2 = (1 - x) * y
         C3 = x * (1 - y)
         C4 = x * y
-        logage_new, logg_new, logteff_new, logl_new = [
-            (C1[:, None] * _[l1feh, l1mass] + C2[:, None] * _[l1feh, l2mass] +
-             C3[:, None] * _[l2feh, l1mass] + C4[:, None] * _[l2feh, l2mass])
-            for _ in [
-                self.logage_grid, self.logg_grid, self.logteff_grid,
-                self.logl_grid
-            ]
-        ]
+        logage_new = (C1[:, None] * self.logage_grid[l1feh, l1mass] +
+                      C2[:, None] * self.logage_grid[l1feh, l2mass] +
+                      C3[:, None] * self.logage_grid[l2feh, l1mass] +
+                      C4[:, None] * self.logage_grid[l2feh, l2mass])
+
         # these arrays now have star id as first axis
         # and then store the age, logg, logteff, logl for a given mass star
         # as a function of EEP
@@ -285,21 +304,25 @@ class TheoryInterpolator:
         # this needs to be sped up
 
         pos2 = pos1 + 1
-        bad = bad | (pos1 < 0) | ((pos1) >= (maxep - 1))
+        bad = bad | (pos1 < 0) | (pos1 >= (maxep - 1))
         pos1[bad] = 0
         pos2[bad] = 1
         ids = np.arange(len(logage))
         x1 = (logage - logage_new[ids, pos1]) / (logage_new[ids, pos2] -
                                                  logage_new[ids, pos1])
-        # perfoming the linear interpolation with age
-        ret = [
-            _[ids, pos1] + x1 * (_[ids, pos2] - _[ids, pos1])
-            for _ in [logg_new, logteff_new, logl_new]
-        ]
-        ret = {'logg': ret[0], 'logteff': ret[1], 'logl': ret[2]}
-        for k in ['logg', 'logteff', 'logl']:
-            ret[k][bad] = np.nan
-        return ret
+        return dict(C1=C1,
+                    C2=C2,
+                    C3=C3,
+                    C4=C4,
+                    x1=x1,
+                    bad=bad,
+                    l1feh=l1feh,
+                    l2feh=l2feh,
+                    l1mass=l1mass,
+                    l2mass=l2mass,
+                    ids=ids,
+                    pos1=pos1,
+                    pos2=pos2)
 
 
 class Interpolator:

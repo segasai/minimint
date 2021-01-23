@@ -5,14 +5,16 @@ on: push
 
 jobs:
   tester:
-    name: Bla-bla
+    name: Test the code
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: [3.6, 3.8]
 
     steps:
-      - name: Checkout code
+      - name: Checkout 
+        uses: actions/checkout@v2
+      - name: Python setup
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}

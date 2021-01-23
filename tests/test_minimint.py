@@ -41,6 +41,8 @@ def test_example():
             iso = ii(massgrid, lage, feh)
             x, y = (iso['DECam_g'] - iso['DECam_r'], iso['DECam_r'])
             mass = ii.getMaxMass(lage, feh)
+            massMS = ii.getMaxMassMS(lage, feh)
+            assert (massMS < mass)
             assert (np.isfinite(ii(mass, lage, feh)['DECam_g']))
             assert (not np.isfinite(ii(mass + 1e-6, lage, feh)['DECam_g']))
 

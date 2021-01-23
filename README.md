@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.com/segasai/minimint.svg?branch=master)](https://travis-ci.com/segasai/minimint)
+[![Build Status](https://github.com/segasai/minimint/workflows/Minimint/badge.svg)](https://github.com/segasai/minimint/actions?query=workflow%3AMinimint)
 [![Coverage Status](https://coveralls.io/repos/github/segasai/minimint/badge.svg?branch=master)](https://coveralls.io/github/segasai/minimint?branch=master)
 
 Minimint (MIni Mist INTerpolation)

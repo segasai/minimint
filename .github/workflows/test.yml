@@ -1,0 +1,30 @@
+name: Minimint
+
+# Run this workflow every time a new commit pushed to your repository
+on: push
+
+jobs:
+  tester:
+    name: Bla-bla
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.6, 3.8]
+
+    steps:
+      - name: Checkout code
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: 'x64'
+      - name: Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+          pip install pytest-cov
+          pip install coverall
+          pip install .
+      - name: Test
+        run: |
+          pytest --cov=minimint -s

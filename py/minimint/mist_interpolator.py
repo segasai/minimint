@@ -276,7 +276,34 @@ class TheoryInterpolator:
             ret[k][good] = xret[k]
         return ret
 
+    def getMaxMass(self, logage, feh):
+        R = self.__get_eep_coeffs(self.umass, self.umass * 0 + logage,
+                                  self.umass * 0 + feh)
+        isfin = R['bad']
+        isfin[0] = False
+        first_bad = np.nonzero(isfin)[0][0]
+        niter = 40
+        m1 = self.umass[first_bad - 1]
+        m2 = self.umass[first_bad]
+        for i in range(niter):
+            curm = (m1 + m2) / 2.
+            bad = self.__get_eep_coeffs(curm, logage, feh)['bad'][0]
+            if bad:
+                m1, m2 = m1, curm
+            else:
+                m1, m2 = curm, m2
+        return m1
+
     def __get_eep_coeffs(self, mass, logage, feh):
+        """
+        This function gets all the necessary coefficients for the interpolation
+The interpolation is done in two stages:
+1) Bilinear integration over mass, feh with coefficients C1,C2,C3,C4
+2) Then there is a final interpolation over EEP axis
+"""
+        feh, mass, logage = [
+            np.atleast_1d(np.asarray(_)) for _ in [feh, mass, logage]
+        ]
         N = len(logage)
         l1feh = np.searchsorted(self.ufeh, feh) - 1
         l2feh = l1feh + 1
@@ -410,3 +437,6 @@ class Interpolator:
         for k in res.keys():
             res[k] = res[k].reshape(shape)
         return res
+
+    def getMaxMass(self, logage, feh):
+        return self.logInt.getMaxMass(logage, feh)

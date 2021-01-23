@@ -37,7 +37,7 @@ def test_example():
             x, y = (iso['DECam_g'] - iso['DECam_r'], iso['DECam_r'])
             mass = ii.getMaxMass(lage, feh)
             assert (np.isfinite(ii(mass, lage, feh)['DECam_g']))
-            assert (np.isfinite(ii(mass + 1e-6, lage, feh)['DECam_g']))
+            assert (not np.isfinite(ii(mass + 1e-6, lage, feh)['DECam_g']))
 
     for feh in fehgrid:
         for lage in logagegrid:

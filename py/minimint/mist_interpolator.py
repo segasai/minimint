@@ -281,9 +281,11 @@ class TheoryInterpolator:
 """
         R = self.__get_eep_coeffs(self.umass, self.umass * 0 + logage,
                                   self.umass * 0 + feh)
-        isfin = R['bad']
-        isfin[0] = False
-        first_bad = np.nonzero(isfin)[0][0]
+        bad = R['bad']
+        bad[0] = False
+        # first mass will evaluate to bad because it's
+        # leftmost point in the grid
+        first_bad = np.nonzero(bad)[0][0]
         niter = 40
         m1 = self.umass[first_bad - 1]
         m2 = self.umass[first_bad]
@@ -338,8 +340,9 @@ The interpolation is done in two stages:
         # as a function of EEP
 
         large = 1e100
-        logage_new[~np.isfinite(logage_new)] = large
-        maxep = (np.isfinite(logage_new) *
+        bad_age = ~np.isfinite(logage_new)
+        logage_new[bad_age] = large
+        maxep = ((~bad_age).astype(int) *
                  np.arange(self.neep)[None, :]).max(axis=1)
         pos1 = np.zeros(N, dtype=int)
 
@@ -355,6 +358,10 @@ The interpolation is done in two stages:
         ids = np.arange(N)
         x1 = (logage - logage_new[ids, pos1]) / (logage_new[ids, pos2] -
                                                  logage_new[ids, pos1])
+        # x1 is the coefficient for interpolation in EEP axis
+        # 0<=x1<1
+        # pos1 is the position in the EEP axis (essentially floor(EEP))
+        # 0<=pos1<neep
         return dict(C1=C1,
                     C2=C2,
                     C3=C3,

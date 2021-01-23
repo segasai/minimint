@@ -266,7 +266,8 @@ class TheoryInterpolator:
         DD = {
             'logg': self.logg_grid,
             'logteff': self.logteff_grid,
-            'logl': self.logl_grid
+            'logl': self.logl_grid,
+            'phase': self.phase_grid
         }
         xret = {}
         for curkey, curarr in DD.items():
@@ -278,14 +279,27 @@ class TheoryInterpolator:
                      C3_good * curarr[l2feh_good, l1mass_good, cureep] +
                      C4_good * curarr[l2feh_good, l2mass_good, cureep]))
             xret[curkey] = curr[0] + eep_frac_good * (curr[1] - curr[0])
-
-        # perfoming the linear interpolation with age
+            # perfoming the linear interpolation with age
 
         ret = {}
-        for k in ['logg', 'logteff', 'logl']:
+        for k in ['logg', 'logteff', 'logl', 'phase']:
             ret[k] = np.zeros(N) + np.nan
             ret[k][good] = xret[k]
         return ret
+
+    def getMaxMassMS(self, logage, feh):
+        """Find approximately the maximum mass on the main sequence """
+        R = self.__get_eep_coeffs(self.umass, self.umass * 0 + logage,
+                                  self.umass * 0 + feh)
+        eep = R['eep1']
+        bad = R['bad']
+        bad[0] = False
+        phase = np.zeros((4, len(bad)))
+        phase[0, :] = self.phase_grid[R['l1feh'], R['l1mass'], eep]
+        phase[1, :] = self.phase_grid[R['l2feh'], R['l1mass'], eep]
+        phase[2, :] = self.phase_grid[R['l1feh'], R['l2mass'], eep]
+        phase[3, :] = self.phase_grid[R['l2feh'], R['l2mass'], eep]
+        return self.umass[(phase.max(axis=0) < 0.5) & (~bad)].max()
 
     def getMaxMass(self, logage, feh):
         """Determine the maximum mass that exists on the current isochrone
@@ -461,3 +475,6 @@ class Interpolator:
     def getMaxMass(self, logage, feh):
         """ Return the maximum mass on a given isochrone """
         return self.isoInt.getMaxMass(logage, feh)
+
+    def getMaxMassMS(self, logage, feh):
+        return self.isoInt.getMaxMassMS(logage, feh)

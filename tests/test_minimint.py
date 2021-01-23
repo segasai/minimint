@@ -1,10 +1,8 @@
 import minimint
 import numpy as np
-import sys
 
-
-def test_install():
-    minimint.download_and_prepare()
+#def test_install():
+#    minimint.download_and_prepare()
 
 
 def test_run():
@@ -23,8 +21,8 @@ def test_filters():
 def test_example():
 
     filters = [
-        'DECam_g', 'DECam_r', "Gaia_G_MAW", "Gaia_BP_MAWf", 'Gaia_RP_MAW',
-        'Gaia_BP_DR2Rev', 'Gaia_RP_DR2Rev', 'WISE_W1', 'WISE_W2'
+        'DECam_g', 'DECam_r', "Gaia_G_EDR3", "Gaia_BP_EDR3", 'Gaia_RP_EDR3',
+        'WISE_W1', 'WISE_W2'
     ]
 
     # Define interpolation object
@@ -32,17 +30,21 @@ def test_example():
 
     massgrid = 10**np.linspace(np.log10(0.1), np.log10(10), 10000)
     logagegrid = [7, 8, 9, 10]
-    fehgrid = [-1, 0]
+    fehgrid = [-2, -1, 0]
     for feh in fehgrid:
         for lage in logagegrid:
             iso = ii(massgrid, lage, feh)
             x, y = (iso['DECam_g'] - iso['DECam_r'], iso['DECam_r'])
+            mass = ii.getMaxMass(lage, feh)
+            assert (np.isfinite(ii(mass, lage, feh)['DECam_g']))
+            assert (np.isfinite(ii(mass + 1e-6, lage, feh)['DECam_g']))
 
     for feh in fehgrid:
         for lage in logagegrid:
             iso = ii(massgrid, lage, feh)
-            x, y = (iso['Gaia_BP_MAWf'] - iso['Gaia_RP_MAW'],
-                    iso['Gaia_G_MAW'])
+            x, y = (iso['Gaia_BP_EDR3'] - iso['Gaia_RP_EDR3'],
+                    iso['Gaia_G_EDR3'])
+            del x, y
 
     # Compute the evolutionary track
 
@@ -58,5 +60,4 @@ def test_example():
     lagegrid = np.linspace(5, 10., 50000)
     mass = 1.04
     iso1 = ii(mass, lagegrid, -1)
-    x, y = (iso1['logteff'], iso1['logl'])
-    x, y = (iso1['logteff'], iso1['logg'])
+    (iso1['logteff'], iso1['logl'])

@@ -277,6 +277,8 @@ class TheoryInterpolator:
         return ret
 
     def getMaxMass(self, logage, feh):
+        """Determine the maximum mass that exists on the current isochrone
+"""
         R = self.__get_eep_coeffs(self.umass, self.umass * 0 + logage,
                                   self.umass * 0 + feh)
         isfin = R['bad']
@@ -439,4 +441,5 @@ class Interpolator:
         return res
 
     def getMaxMass(self, logage, feh):
-        return self.logInt.getMaxMass(logage, feh)
+        """ Return the maximum mass on a given isochrone """
+        return self.isoInt.getMaxMass(logage, feh)

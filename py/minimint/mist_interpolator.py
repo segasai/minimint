@@ -20,16 +20,16 @@ INTERP_PKL = 'interp.pkl'
 def getheader(f):
     fp = open(f, 'r')
     for i in range(5):
-        l = fp.readline()
-    vals = l[1:].split()
-    #Yinit        Zinit   [Fe/H]   [a/Fe]  v/vcrit
+        ll = fp.readline()
+    vals = ll[1:].split()
+    # Yinit        Zinit   [Fe/H]   [a/Fe]  v/vcrit
 
     D = {'feh': float(vals[2]), 'afe': float(vals[3])}
     for i in range(3):
-        l = fp.readline()
+        ll = fp.readline()
     #     initial_mass   N_pts   N_EEP   N_col   phase        type\n'
     # 3.8000000000E+00    1409       9      77     YES    low-mass\n'
-    vals = l[1:].split()
+    vals = ll[1:].split()
     D['initial_mass'] = float(vals[0])
     D['N_pts'] = int(vals[1])
     D['N_EEP'] = int(vals[2])
@@ -73,7 +73,7 @@ def read_grid(eep_prefix, outp_prefix):
 
 def grid3d_filler(ima):
     """
-    This fills nan gaps along one dimension in a 3d cube. 
+    This fills nan gaps along one dimension in a 3d cube.
     I fill the gaps along mass dimension
     The array is modified
     """
@@ -100,6 +100,15 @@ def grid1d_filler(arr):
                                                         k=1)(xids1)
 
 
+def __bc_url(x):
+    return 'https://waps.cfa.harvard.edu/MIST/BC_tables/%s.txz' % x
+
+
+def __eep_url(x):
+    return ('https://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/' +
+            'MIST_v1.2_feh_%s_afe_p0.0_vvcrit0.4_EEPS.txz') % x
+
+
 def download_and_prepare(filters=[
     'DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper', 'UBVRIplus',
     'WISE'
@@ -118,10 +127,8 @@ def download_and_prepare(filters=[
         Temporary directory for storing downloaded files
     """
 
-    bc_url = lambda x: 'https://waps.cfa.harvard.edu/MIST/BC_tables/%s.txz' % x
-    eep_url = lambda x: 'https://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/MIST_v1.2_feh_%s_afe_p0.0_vvcrit0.4_EEPS.txz' % x
-    mets = 'm4.00,m3.50,m3.00,m2.50,m2.00,m1.75,m1.50,m1.25,m1.00,m0.75,m0.50,m0.25,p0.00,p0.25,p0.50'.split(
-        ',')
+    mets = ('m4.00,m3.50,m3.00,m2.50,m2.00,m1.75,m1.50,m1.25,' +
+            'm1.00,m0.75,m0.50,m0.25,p0.00,p0.25,p0.50').split(',')
 
     def writer(url, pref):
         print('Downloading', url)
@@ -136,9 +143,9 @@ def download_and_prepare(filters=[
 
     with tempfile.TemporaryDirectory(dir=tmp_prefix) as T:
         for curfilt in filters:
-            writer(bc_url(curfilt), T)
+            writer(__bc_url(curfilt), T)
         for curmet in mets:
-            writer(eep_url(curmet), T)
+            writer(__eep_url(curmet), T)
         prepare(T, T, outp_prefix=outp_prefix, filters=filters)
 
 
@@ -148,8 +155,8 @@ def prepare(eep_prefix,
             filters=('DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper',
                      'UBVRIplus', 'WISE')):
     """
-    Prepare the isochrone files 
-    
+    Prepare the isochrone files
+
     Parameters
     ----------
     eep_prefix: string
@@ -162,8 +169,8 @@ def prepare(eep_prefix,
     print('Reading EEP grid')
     if not os.path.isdir(eep_prefix) or not os.path.isdir(outp_prefix):
         raise RuntimeError(
-            'The arguments must be paths to the directories with *EEP and bolometric corrections'
-        )
+            'The arguments must be paths to the directories with EEP \
+            and bolometric corrections')
     read_grid(eep_prefix, outp_prefix)
     print('Processing EEPs')
     tab = atpy.Table().read(outp_prefix + '/' + TRACKS_FILE)
@@ -208,9 +215,9 @@ def prepare(eep_prefix,
 class TheoryInterpolator:
     def __init__(self, prefix=None):
         """
-        Construct the interpolator that computes theoretical 
+        Construct the interpolator that computes theoretical
         quantities (logg, logl, logteff) given (mass, logage, feh)
-        
+
         Parameters
         ----------
         prefix: str
@@ -232,7 +239,7 @@ class TheoryInterpolator:
         feh, mass, logage = [
             np.atleast_1d(np.asarray(_)) for _ in [feh, mass, logage]
         ]
-        #print (age)
+        # print (age)
         l1feh = np.searchsorted(self.ufeh, feh) - 1
         l2feh = l1feh + 1
         l1mass = np.searchsorted(self.umass, mass) - 1
@@ -245,7 +252,6 @@ class TheoryInterpolator:
         l1feh[bad] = 0
         l2feh[bad] = 1
 
-        poss = []
         x = (feh - self.ufeh[l1feh]) / (self.ufeh[l2feh] - self.ufeh[l1feh]
                                         )  # from 0 to 1
         y = (mass - self.umass[l1mass]) / (
@@ -266,7 +272,7 @@ class TheoryInterpolator:
         # these arrays now have star id as first axis
         # and then store the age, logg, logteff, logl for a given mass star
         # as a function of EEP
-        
+
         large = 1e100
         logage_new[~np.isfinite(logage_new)] = large
         maxep = (np.isfinite(logage_new) *
@@ -299,7 +305,7 @@ class TheoryInterpolator:
 class Interpolator:
     def __init__(self, filts, data_prefix=None):
         """
-        Initialize the interpolator class, specifying filter names 
+        Initialize the interpolator class, specifying filter names
         and optionally the folder where the preprocessed isochrones lie
 
         Parameters
@@ -318,7 +324,7 @@ class Interpolator:
     def __call__(self, mass, logage, feh):
         """
         Compute interpolated isochrone for a given mass log10(age) and feh
-        
+
         Parameters
         ----------
         mass: float/numpy

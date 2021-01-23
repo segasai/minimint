@@ -192,8 +192,8 @@ def prepare(eep_prefix,
     phase_grid = np.zeros((nfeh, nmass, neep)) - np.nan
 
     logage_grid[feh_id, mass_id, tab['EEP']] = np.log10(tab['star_age'])
-    # convert age grid into delta age to a given EEP
     logage_grid[:, :, 1:] = np.diff(logage_grid, axis=2)
+    # convert age grid into delta age to a given EEP
     logg_grid[feh_id, mass_id, tab['EEP']] = tab['log_g']
     logteff_grid[feh_id, mass_id, tab['EEP']] = tab['log_Teff']
     logl_grid[feh_id, mass_id, tab['EEP']] = tab['log_L']
@@ -248,7 +248,7 @@ class TheoryInterpolator:
         feh, mass, logage = [
             np.atleast_1d(np.asarray(_)) for _ in [feh, mass, logage]
         ]
-
+        N = len(logage)
         DD = self.__get_eep_coeffs(mass, logage, feh)
         C1, C2, C3, C4 = (DD['C1'], DD['C2'], DD['C3'], DD['C4'])
         l1feh, l2feh, l1mass, l2mass = (DD['l1feh'], DD['l2feh'], DD['l1mass'],
@@ -263,25 +263,24 @@ class TheoryInterpolator:
                  eep_frac
              ]
          ]
-        logg_new_good = np.zeros(C1_good.shape) + np.nan
-        logteff_new_good = np.zeros(C1_good.shape) + np.nan
-        logl_new_good = np.zeros(C1_good.shape) + np.nan
-        logg_new_good, logteff_new_good, logl_new_good = [
-            (C1_good[:, None] * _[l1feh_good, l1mass_good] +
-             C2_good[:, None] * _[l1feh_good, l2mass_good] +
-             C3_good[:, None] * _[l2feh_good, l1mass_good] +
-             C4_good[:, None] * _[l2feh_good, l2mass_good])
-            for _ in [self.logg_grid, self.logteff_grid, self.logl_grid]
-        ]
-        # perfoming the linear interpolation with age
+        DD = {
+            'logg': self.logg_grid,
+            'logteff': self.logteff_grid,
+            'logl': self.logl_grid
+        }
         xret = {}
-        ids = np.arange(len(logg_new_good))
-        xret['logg'], xret['logteff'], xret['logl'] = [
-            _[ids, eep1_good] + eep_frac_good *
-            (_[ids, eep2_good] - _[ids, eep1_good])
-            for _ in [logg_new_good, logteff_new_good, logl_new_good]
-        ]
-        N = len(logage)
+        for curkey, curarr in DD.items():
+            curr = []
+            for j, cureep in enumerate([eep1_good, eep2_good]):
+                curr.append(
+                    (C1_good * curarr[l1feh_good, l1mass_good, cureep] +
+                     C2_good * curarr[l1feh_good, l2mass_good, cureep] +
+                     C3_good * curarr[l2feh_good, l1mass_good, cureep] +
+                     C4_good * curarr[l2feh_good, l2mass_good, cureep]))
+            xret[curkey] = curr[0] + eep_frac_good * (curr[1] - curr[0])
+
+        # perfoming the linear interpolation with age
+
         ret = {}
         for k in ['logg', 'logteff', 'logl']:
             ret[k] = np.zeros(N) + np.nan

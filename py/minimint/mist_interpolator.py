@@ -245,28 +245,44 @@ class TheoryInterpolator:
         l1feh, l2feh, l1mass, l2mass = (DD['l1feh'], DD['l2feh'], DD['l1mass'],
                                         DD['l2mass'])
         pos1, pos2, x1, bad = DD['pos1'], DD['pos2'], DD['x1'], DD['bad']
-        ids = DD['ids']
-        logg_new, logteff_new, logl_new = [
-            (C1[:, None] * _[l1feh, l1mass] + C2[:, None] * _[l1feh, l2mass] +
-             C3[:, None] * _[l2feh, l1mass] + C4[:, None] * _[l2feh, l2mass])
+        good = ~bad
+        (C1_good, C2_good, C3_good, C4_good, l1feh_good, l2feh_good,
+         l1mass_good, l2mass_good, pos1_good, pos2_good, x1_good) = [
+             _[good] for _ in
+             [C1, C2, C3, C4, l1feh, l2feh, l1mass, l2mass, pos1, pos2, x1]
+         ]
+        logg_new_good = np.zeros(C1_good.shape) + np.nan
+        logteff_new_good = np.zeros(C1_good.shape) + np.nan
+        logl_new_good = np.zeros(C1_good.shape) + np.nan
+        logg_new_good, logteff_new_good, logl_new_good = [
+            (C1_good[:, None] * _[l1feh_good, l1mass_good] +
+             C2_good[:, None] * _[l1feh_good, l2mass_good] +
+             C3_good[:, None] * _[l2feh_good, l1mass_good] +
+             C4_good[:, None] * _[l2feh_good, l2mass_good])
             for _ in [self.logg_grid, self.logteff_grid, self.logl_grid]
         ]
         # perfoming the linear interpolation with age
-        ret = [
-            _[ids, pos1] + x1 * (_[ids, pos2] - _[ids, pos1])
-            for _ in [logg_new, logteff_new, logl_new]
+        xret = {}
+        ids = np.arange(len(logg_new_good))
+        xret['logg'], xret['logteff'], xret['logl'] = [
+            _[ids, pos1_good] + x1_good *
+            (_[ids, pos2_good] - _[ids, pos1_good])
+            for _ in [logg_new_good, logteff_new_good, logl_new_good]
         ]
-        ret = {'logg': ret[0], 'logteff': ret[1], 'logl': ret[2]}
+        N = len(logage)
+        ret = {}
         for k in ['logg', 'logteff', 'logl']:
-            ret[k][bad] = np.nan
+            ret[k] = np.zeros(N) + np.nan
+            ret[k][good] = xret[k]
         return ret
 
     def __get_eep_coeffs(self, mass, logage, feh):
+        N = len(logage)
         l1feh = np.searchsorted(self.ufeh, feh) - 1
         l2feh = l1feh + 1
         l1mass = np.searchsorted(self.umass, mass) - 1
         l2mass = l1mass + 1
-        bad = np.zeros(len(feh), dtype=bool)
+        bad = np.zeros(N, dtype=bool)
         bad = bad | (l2mass >= len(self.umass) - 1) | (
             l2feh >= len(self.ufeh) - 1) | (l1mass < 0) | (l1feh < 0)
         l1mass[bad] = 0
@@ -296,10 +312,10 @@ class TheoryInterpolator:
         logage_new[~np.isfinite(logage_new)] = large
         maxep = (np.isfinite(logage_new) *
                  np.arange(self.neep)[None, :]).max(axis=1)
-        pos1 = np.zeros(len(logage), dtype=int)
+        pos1 = np.zeros(N, dtype=int)
 
         # here we are finding the EEP point with the right age
-        for i in range(len(logage)):
+        for i in range(N):
             pos1[i] = np.searchsorted(logage_new[i, :], logage[i]) - 1
         # this needs to be sped up
 
@@ -307,7 +323,7 @@ class TheoryInterpolator:
         bad = bad | (pos1 < 0) | (pos1 >= (maxep - 1))
         pos1[bad] = 0
         pos2[bad] = 1
-        ids = np.arange(len(logage))
+        ids = np.arange(N)
         x1 = (logage - logage_new[ids, pos1]) / (logage_new[ids, pos2] -
                                                  logage_new[ids, pos1])
         return dict(C1=C1,
@@ -320,7 +336,6 @@ class TheoryInterpolator:
                     l2feh=l2feh,
                     l1mass=l1mass,
                     l2mass=l2mass,
-                    ids=ids,
                     pos1=pos1,
                     pos2=pos2)
 

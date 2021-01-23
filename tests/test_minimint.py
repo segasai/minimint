@@ -1,8 +1,13 @@
 import minimint
 import numpy as np
+import os
 
-#def test_install():
-#    minimint.download_and_prepare()
+
+def test_install():
+    if os.environ.get('LOCAL_TESTING') is not None:
+        pass
+    else:
+        minimint.download_and_prepare()
 
 
 def test_run():

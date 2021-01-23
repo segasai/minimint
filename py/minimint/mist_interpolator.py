@@ -244,12 +244,15 @@ class TheoryInterpolator:
         C1, C2, C3, C4 = (DD['C1'], DD['C2'], DD['C3'], DD['C4'])
         l1feh, l2feh, l1mass, l2mass = (DD['l1feh'], DD['l2feh'], DD['l1mass'],
                                         DD['l2mass'])
-        pos1, pos2, x1, bad = DD['pos1'], DD['pos2'], DD['x1'], DD['bad']
+        eep1, eep2, eep_frac, bad = (DD['eep1'], DD['eep2'], DD['eep_frac'],
+                                     DD['bad'])
         good = ~bad
         (C1_good, C2_good, C3_good, C4_good, l1feh_good, l2feh_good,
-         l1mass_good, l2mass_good, pos1_good, pos2_good, x1_good) = [
-             _[good] for _ in
-             [C1, C2, C3, C4, l1feh, l2feh, l1mass, l2mass, pos1, pos2, x1]
+         l1mass_good, l2mass_good, eep1_good, eep2_good, eep_frac_good) = [
+             _[good] for _ in [
+                 C1, C2, C3, C4, l1feh, l2feh, l1mass, l2mass, eep1, eep2,
+                 eep_frac
+             ]
          ]
         logg_new_good = np.zeros(C1_good.shape) + np.nan
         logteff_new_good = np.zeros(C1_good.shape) + np.nan
@@ -265,8 +268,8 @@ class TheoryInterpolator:
         xret = {}
         ids = np.arange(len(logg_new_good))
         xret['logg'], xret['logteff'], xret['logl'] = [
-            _[ids, pos1_good] + x1_good *
-            (_[ids, pos2_good] - _[ids, pos1_good])
+            _[ids, eep1_good] + eep_frac_good *
+            (_[ids, eep2_good] - _[ids, eep1_good])
             for _ in [logg_new_good, logteff_new_good, logl_new_good]
         ]
         N = len(logage)
@@ -344,36 +347,36 @@ The interpolation is done in two stages:
         logage_new[bad_age] = large
         maxep = ((~bad_age).astype(int) *
                  np.arange(self.neep)[None, :]).max(axis=1)
-        pos1 = np.zeros(N, dtype=int)
+        eep1 = np.zeros(N, dtype=int)
 
         # here we are finding the EEP point with the right age
         for i in range(N):
-            pos1[i] = np.searchsorted(logage_new[i, :], logage[i]) - 1
+            eep1[i] = np.searchsorted(logage_new[i, :], logage[i]) - 1
         # this needs to be sped up
 
-        pos2 = pos1 + 1
-        bad = bad | (pos1 < 0) | (pos1 >= (maxep - 1))
-        pos1[bad] = 0
-        pos2[bad] = 1
+        eep2 = eep1 + 1
+        bad = bad | (eep1 < 0) | (eep1 >= (maxep - 1))
+        eep1[bad] = 0
+        eep2[bad] = 1
         ids = np.arange(N)
-        x1 = (logage - logage_new[ids, pos1]) / (logage_new[ids, pos2] -
-                                                 logage_new[ids, pos1])
-        # x1 is the coefficient for interpolation in EEP axis
-        # 0<=x1<1
-        # pos1 is the position in the EEP axis (essentially floor(EEP))
-        # 0<=pos1<neep
+        eep_frac = (logage - logage_new[ids, eep1]) / (logage_new[ids, eep2] -
+                                                       logage_new[ids, eep1])
+        # eep_frac is the coefficient for interpolation in EEP axis
+        # 0<=eep_frac<1
+        # eep1 is the position in the EEP axis (essentially floor(EEP))
+        # 0<=eep1<neep
         return dict(C1=C1,
                     C2=C2,
                     C3=C3,
                     C4=C4,
-                    x1=x1,
+                    eep_frac=eep_frac,
                     bad=bad,
                     l1feh=l1feh,
                     l2feh=l2feh,
                     l1mass=l1mass,
                     l2mass=l2mass,
-                    pos1=pos1,
-                    pos2=pos2)
+                    eep1=eep1,
+                    eep2=eep2)
 
 
 class Interpolator:

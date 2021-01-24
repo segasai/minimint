@@ -287,31 +287,31 @@ class TheoryInterpolator:
 
     def getMaxMassMS(self, logage, feh):
         """Find approximately the maximum mass on the main sequence """
-        R = self.__get_eep_coeffs(self.umass, self.umass * 0 + logage,
-                                  self.umass * 0 + feh)
-        eep = R['eep1']
-        bad = R['bad']
-        bad[0] = False
-        phase = np.zeros((4, len(bad)))
-        phase[0, :] = self.phase_grid[R['l1feh'], R['l1mass'], eep]
-        phase[1, :] = self.phase_grid[R['l2feh'], R['l1mass'], eep]
-        phase[2, :] = self.phase_grid[R['l1feh'], R['l2mass'], eep]
-        phase[3, :] = self.phase_grid[R['l2feh'], R['l2mass'], eep]
-        return self.umass[(phase.max(axis=0) < 0.5) & (~bad)].max()
+        N = len(self.umass) - 1
+        i1 = 1
+        i2 = N - 1
+        phase = np.zeros(4)
+        while i2 - i1 > 1:
+            ix = i1 + max((i2 - i1) // 2, 1)
+            R = self.__get_eep_coeffs(self.umass[ix], logage, feh)
+            eep = R['eep1']
+            bad = R['bad'][0]
+            phase = max(self.phase_grid[R['l1feh'], R['l1mass'], eep],
+                        self.phase_grid[R['l2feh'], R['l1mass'], eep],
+                        self.phase_grid[R['l1feh'], R['l2mass'], eep],
+                        self.phase_grid[R['l2feh'], R['l2mass'], eep])
+            if phase > 0.5 or bad:
+                i1, i2 = i1, ix
+            else:
+                i1, i2 = ix, i2
+        return self.umass[i1]
 
     def getMaxMass(self, logage, feh):
         """Determine the maximum mass that exists on the current isochrone
 """
-        R = self.__get_eep_coeffs(self.umass, self.umass * 0 + logage,
-                                  self.umass * 0 + feh)
-        bad = R['bad']
-        bad[0] = False
-        # first mass will evaluate to bad because it's
-        # leftmost point in the grid
-        first_bad = np.nonzero(bad)[0][0]
         niter = 40
-        m1 = self.umass[first_bad - 1]
-        m2 = self.umass[first_bad]
+        m1 = self.umass[1]
+        m2 = self.umass[-1]
         for i in range(niter):
             curm = (m1 + m2) / 2.
             bad = self.__get_eep_coeffs(curm, logage, feh)['bad'][0]

@@ -428,7 +428,8 @@ This checks is the point is valid
         # these arrays now have star id as first axis
         # and then store the age, logg, logteff, logl for a given mass star
         # as a function of EEP
-        if np.nanmax(logage_new) < logage:
+        pos = np.nanargmax(logage_new)
+        if logage > logage_new[pos - 1]:
             return False
         return True
 

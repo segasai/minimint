@@ -290,9 +290,11 @@ class TheoryInterpolator:
         N = len(self.umass) - 1
         i1 = 1
         i2 = N - 1
-        phase = np.zeros(4)
-        while i2 - i1 > 1:
-            ix = i1 + max((i2 - i1) // 2, 1)
+        stop = False
+        while not stop:
+            ix = (i1 + i2) // 2
+            if (i2 - i1) == 1:
+                stop = True
             R = self.__get_eep_coeffs(self.umass[ix], logage, feh)
             eep = R['eep1']
             bad = R['bad'][0]
@@ -301,9 +303,9 @@ class TheoryInterpolator:
                         self.phase_grid[R['l1feh'], R['l2mass'], eep],
                         self.phase_grid[R['l2feh'], R['l2mass'], eep])
             if phase > 0.5 or bad:
-                i1, i2 = i1, ix
+                i2 = ix
             else:
-                i1, i2 = ix, i2
+                i1 = ix
         return self.umass[i1]
 
     def getMaxMass(self, logage, feh):

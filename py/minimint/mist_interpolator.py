@@ -185,22 +185,22 @@ def prepare(eep_prefix,
     neep = 1710
     nfeh = len(ufeh)
     nmass = len(umass)
-    grids = ['logage', 'logteff', 'logg', 'feh', 'phase', 'logl']
+    grids = ['logage', 'logteff', 'logg', 'logl', 'phase']
     for k in grids:
         grid = np.zeros((nfeh, nmass, neep)) - np.nan
         if k == 'logage':
             grid[feh_id, mass_id, tab['EEP']] = np.log10(tab['star_age'])
             grid[:, :, 1:] = np.diff(grid, axis=2)
-        elif k == 'logg':
-            grid[feh_id, mass_id, tab['EEP']] = tab['log_g']
         elif k == 'logteff':
             grid[feh_id, mass_id, tab['EEP']] = tab['log_Teff']
+        elif k == 'logg':
+            grid[feh_id, mass_id, tab['EEP']] = tab['log_g']
         elif k == 'logl':
             grid[feh_id, mass_id, tab['EEP']] = tab['log_L']
         elif k == 'phase':
             grid[feh_id, mass_id, tab['EEP']] = tab['phase']
         else:
-            raise Exception('wrong')
+            raise Exception('wrong ' + k)
 
         grid3d_filler(grid)
 

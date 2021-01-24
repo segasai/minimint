@@ -309,6 +309,9 @@ class TheoryInterpolator:
     def getMaxMass(self, logage, feh):
         """Determine the maximum mass that exists on the current isochrone
 """
+        logage, feh = np.float64(logage), np.float64(feh)
+        # ensure 64bit float otherwise incosistencies in float computations
+        # will kill us
         niter = 40
         m1 = self.umass[1]
         m2 = self.umass[-1]
@@ -330,7 +333,8 @@ The interpolation is done in two stages:
 2) Then there is a final interpolation over EEP axis
 """
         feh, mass, logage = [
-            np.atleast_1d(np.asarray(_)) for _ in [feh, mass, logage]
+            np.atleast_1d(np.asarray(_, dtype=np.float64))
+            for _ in [feh, mass, logage]
         ]
         N = len(logage)
         l1feh = np.searchsorted(self.ufeh, feh) - 1
@@ -358,11 +362,9 @@ The interpolation is done in two stages:
                       C2[:, None] * self.logage_grid[l1feh, l2mass] +
                       C3[:, None] * self.logage_grid[l2feh, l1mass] +
                       C4[:, None] * self.logage_grid[l2feh, l2mass])
-
         # these arrays now have star id as first axis
         # and then store the age, logg, logteff, logl for a given mass star
         # as a function of EEP
-
         large = 1e100
         good_age = np.isfinite(logage_new)
         logage_new[~good_age] = large
@@ -373,9 +375,8 @@ The interpolation is done in two stages:
         for i in range(N):
             eep1[i] = np.searchsorted(logage_new[i, :], logage[i]) - 1
         # this needs to be sped up
-
         eep2 = eep1 + 1
-        bad = bad | (eep1 < 0) | (eep1 >= (maxep - 1))
+        bad = bad | (eep1 < 0) | (eep2 > (maxep))
         eep1[bad] = 0
         eep2[bad] = 1
         ids = np.arange(N)
@@ -402,6 +403,9 @@ The interpolation is done in two stages:
         """
 This checks is the point is valid
 """
+        mass = np.float64(mass)
+        logage = np.float64(logage)
+        feh = np.float64(feh)
         if l1feh is None:
             l1feh = np.searchsorted(self.ufeh, feh) - 1
         l2feh = l1feh + 1
@@ -420,16 +424,41 @@ This checks is the point is valid
         C2 = (1 - x) * y
         C3 = x * (1 - y)
         C4 = x * y
-        logage_new = (C1 * self.logage_grid[l1feh, l1mass] +
-                      C2 * self.logage_grid[l1feh, l2mass] +
-                      C3 * self.logage_grid[l2feh, l1mass] +
-                      C4 * self.logage_grid[l2feh, l2mass])
+        # we want to find there is a point i in the age grid
+        # where grid[i]<=logage<grid[i+1]
+        # and grid[i+1] is not nan
+        # proceed by invariant grid[l]<=X and (NOT grid[r]<=X)
+        # the rhs condition can be satistfied by either grid[r]>X
+        # or grid[r] is not finite
+        i1, i2 = 0, self.neep - 1
 
-        # these arrays now have star id as first axis
-        # and then store the age, logg, logteff, logl for a given mass star
-        # as a function of EEP
-        pos = np.nanargmax(logage_new)
-        if logage > logage_new[pos - 1]:
+        def getAge(i):
+            return (C1 * self.logage_grid[l1feh, l1mass, i] +
+                    C2 * self.logage_grid[l1feh, l2mass, i] +
+                    C3 * self.logage_grid[l2feh, l1mass, i] +
+                    C4 * self.logage_grid[l2feh, l2mass, i])
+
+        # check invariants on edges
+        if not getAge(i1) <= logage:
+            return False
+        if (getAge(i2) <= logage):
+            return False
+        stop = False
+        while not stop:
+            ix = (i1 + i2) // 2
+            if i2 - i1 == 1:
+                stop = True
+            val = getAge(ix)
+            if val <= logage:
+                i1 = ix
+            elif val > logage:
+                return True
+            else:
+                # nan
+                i2 = ix
+        # if I'm here that means
+        # grid[i1]<=logage and (grid[i2]> logage or grid[i2] is nan)
+        if np.isnan(getAge(i2)):
             return False
         return True
 
@@ -467,7 +496,9 @@ class Interpolator:
             Either scalar or vector of [Fe/H]
 
         """
-        mass, logage, feh = [np.asarray(_) for _ in [mass, logage, feh]]
+        mass, logage, feh = [
+            np.asarray(_, dtype=np.float64) for _ in [mass, logage, feh]
+        ]
         mass, logage, feh = np.broadcast_arrays(mass, logage, feh)
         shape = mass.shape
         mass, logage, feh = [np.atleast_1d(_) for _ in [mass, logage, feh]]

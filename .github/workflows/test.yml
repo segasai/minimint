@@ -32,7 +32,6 @@ jobs:
           pytest --cov=minimint -s
       - name: Coveralls
         if: ${{ success() }}
-        run: |
-          coveralls
+        run: coveralls --service=github
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

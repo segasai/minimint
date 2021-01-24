@@ -3,7 +3,7 @@
 
 Minimint (MIni Mist INTerpolation)
 
-Software to do simple interpolation of MIST isochrones
+Software to do simple interpolation of MIST isochrones.
 
 Author: Sergey Koposov (2020) skoposov __AT__ ed __DOT__ ac __DOT__ uk
 
@@ -28,7 +28,7 @@ If you need additional filters, you can specify them using the filters parameter
 
 ``` minimint.download_and_prepare(filters=['JWST','WISE','DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper','UBVRIplus'])```
 Check which filters are available on the MIST website http://waps.cfa.harvard.edu/MIST/model_grids.html
-This will take some time (20-30 min) and will use some space (10-30Gb).
+This will take some time (20-30 min) and will use some space (10-30 Gb).
 
 
 Now you can use the package. In order to create an interpolator object:

@@ -49,7 +49,7 @@ setup(
     version=VERSION,
     author="Sergey Koposov",
     author_email="skoposov@ed.ac.uk",
-    description="MIST interpolation",
+    description="MIST Isochrone interpolation",
     license="BSD",
     keywords="isochrone interpolation",
     url="http://github.com/segasai/minimint",

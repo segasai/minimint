@@ -191,7 +191,7 @@ def prepare(eep_prefix,
         if k == 'logage':
             grid[feh_id, mass_id, tab['EEP']] = np.log10(tab['star_age'])
             grid[:, :, 1:] = np.diff(grid, axis=2)
-        elif k == 'grid':
+        elif k == 'logg':
             grid[feh_id, mass_id, tab['EEP']] = tab['log_g']
         elif k == 'logteff':
             grid[feh_id, mass_id, tab['EEP']] = tab['log_Teff']

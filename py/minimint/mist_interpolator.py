@@ -363,10 +363,9 @@ The interpolation is done in two stages:
         # as a function of EEP
 
         large = 1e100
-        bad_age = ~np.isfinite(logage_new)
-        logage_new[bad_age] = large
-        maxep = ((~bad_age).astype(int) *
-                 np.arange(self.neep)[None, :]).max(axis=1)
+        good_age = np.isfinite(logage_new)
+        logage_new[~good_age] = large
+        maxep = (good_age * np.arange(self.neep)[None, :]).max(axis=1)
         eep1 = np.zeros(N, dtype=int)
 
         # here we are finding the EEP point with the right age

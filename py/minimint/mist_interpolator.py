@@ -10,11 +10,12 @@ import numpy as np
 from minimint import bolom, utils
 
 TRACKS_FILE = 'tracks.fits'
-LOGL_FILE = 'logl_grid.npy'
-LOGG_FILE = 'logg_grid.npy'
-LOGAGE_FILE = 'logage_grid.npy'
-LOGTEFF_FILE = 'logteff_grid.npy'
-PHASE_FILE = 'phase_grid.npy'
+
+
+def get_file(gridt):
+    return '%s_grid.npy' % (gridt)
+
+
 INTERP_PKL = 'interp.pkl'
 
 
@@ -184,36 +185,32 @@ def prepare(eep_prefix,
     neep = 1710
     nfeh = len(ufeh)
     nmass = len(umass)
+    grids = ['logage', 'logteff', 'logg', 'feh', 'phase', 'logl']
+    for k in grids:
+        grid = np.zeros((nfeh, nmass, neep)) - np.nan
+        if k == 'logage':
+            grid[feh_id, mass_id, tab['EEP']] = np.log10(tab['star_age'])
+            grid[:, :, 1:] = np.diff(grid, axis=2)
+        elif k == 'grid':
+            grid[feh_id, mass_id, tab['EEP']] = tab['log_g']
+        elif k == 'logteff':
+            grid[feh_id, mass_id, tab['EEP']] = tab['log_Teff']
+        elif k == 'logl':
+            grid[feh_id, mass_id, tab['EEP']] = tab['log_L']
+        elif k == 'phase':
+            grid[feh_id, mass_id, tab['EEP']] = tab['phase']
+        else:
+            raise Exception('wrong')
 
-    logage_grid = np.zeros((nfeh, nmass, neep)) - np.nan
-    logteff_grid = np.zeros((nfeh, nmass, neep)) - np.nan
-    logg_grid = np.zeros((nfeh, nmass, neep)) - np.nan
-    logl_grid = np.zeros((nfeh, nmass, neep)) - np.nan
-    phase_grid = np.zeros((nfeh, nmass, neep)) - np.nan
+        grid3d_filler(grid)
 
-    logage_grid[feh_id, mass_id, tab['EEP']] = np.log10(tab['star_age'])
-    logage_grid[:, :, 1:] = np.diff(logage_grid, axis=2)
-    # convert age grid into delta age to a given EEP
-    logg_grid[feh_id, mass_id, tab['EEP']] = tab['log_g']
-    logteff_grid[feh_id, mass_id, tab['EEP']] = tab['log_Teff']
-    logl_grid[feh_id, mass_id, tab['EEP']] = tab['log_L']
-    phase_grid[feh_id, mass_id, tab['EEP']] = tab['phase']
+        if k == 'phase':
+            grid = np.round(grid).astype(np.int8)
+        if k == 'logage':
+            grid[:, :, :] = np.cumsum(grid, axis=2)
 
-    grid3d_filler(logg_grid)
-    grid3d_filler(logteff_grid)
-    grid3d_filler(logl_grid)
-    grid3d_filler(logage_grid)
-    grid3d_filler(phase_grid)
+        np.save(outp_prefix + '/' + get_file(k), grid)
 
-    phase_grid = np.round(phase_grid).astype(np.int8)
-
-    logage_grid[:, :, :] = np.cumsum(logage_grid, axis=2)
-
-    np.save(outp_prefix + '/' + LOGG_FILE, logg_grid)
-    np.save(outp_prefix + '/' + LOGL_FILE, logl_grid)
-    np.save(outp_prefix + '/' + LOGTEFF_FILE, logteff_grid)
-    np.save(outp_prefix + '/' + LOGAGE_FILE, logage_grid)
-    np.save(outp_prefix + '/' + PHASE_FILE, phase_grid)
     with open(outp_prefix + '/' + INTERP_PKL, 'wb') as fp:
         pickle.dump(dict(umass=umass, ufeh=ufeh, neep=neep), fp)
     print('Reading/processing bolometric corrections')
@@ -233,11 +230,12 @@ class TheoryInterpolator:
         """
         if prefix is None:
             prefix = utils.get_data_path()
-        self.logg_grid = np.load(prefix + '/' + LOGG_FILE)
-        self.logl_grid = np.load(prefix + '/' + LOGL_FILE)
-        self.logteff_grid = np.load(prefix + '/' + LOGTEFF_FILE)
-        self.logage_grid = np.load(prefix + '/' + LOGAGE_FILE)
-        self.phase_grid = np.load(prefix + '/' + PHASE_FILE)
+        self.logg_grid = np.load(prefix + '/' + get_file('logg'))
+        self.logl_grid = np.load(prefix + '/' + get_file('logl'))
+        self.logteff_grid = np.load(prefix + '/' + get_file('logteff'))
+        self.logage_grid = np.load(prefix + '/' + get_file('logage'))
+        self.phase_grid = np.load(prefix + '/' + get_file('phase'))
+
         with open(prefix + '/' + INTERP_PKL, 'rb') as fp:
             D = pickle.load(fp)
             self.umass = np.array(D['umass'])

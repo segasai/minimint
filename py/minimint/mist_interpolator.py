@@ -312,10 +312,11 @@ class TheoryInterpolator:
         niter = 40
         m1 = self.umass[1]
         m2 = self.umass[-1]
+        l1feh = np.searchsorted(self.ufeh, feh) - 1
         for i in range(niter):
             curm = (m1 + m2) / 2.
-            bad = self.__get_eep_coeffs(curm, logage, feh)['bad'][0]
-            if bad:
+            good = self.__isvalid(curm, logage, feh, l1feh=l1feh)
+            if not good:
                 m1, m2 = m1, curm
             else:
                 m1, m2 = curm, m2
@@ -396,6 +397,40 @@ The interpolation is done in two stages:
                     l2mass=l2mass,
                     eep1=eep1,
                     eep2=eep2)
+
+    def __isvalid(self, mass, logage, feh, l1feh=None):
+        """
+This checks is the point is valid
+"""
+        if l1feh is None:
+            l1feh = np.searchsorted(self.ufeh, feh) - 1
+        l2feh = l1feh + 1
+        l1mass = np.searchsorted(self.umass, mass) - 1
+        l2mass = l1mass + 1
+
+        if ((l2mass >= len(self.umass) - 1) or (l2feh >= len(self.ufeh) - 1)
+                or (l1mass < 0) or (l1feh < 0)):
+            return False
+        x = (feh - self.ufeh[l1feh]) / (self.ufeh[l2feh] - self.ufeh[l1feh]
+                                        )  # from 0 to 1
+        y = (mass - self.umass[l1mass]) / (
+            self.umass[l2mass] - self.umass[l1mass])  # from 0 to 1
+        # this is now bilinear interpolation in the space of mass/metallicity
+        C1 = (1 - x) * (1 - y)
+        C2 = (1 - x) * y
+        C3 = x * (1 - y)
+        C4 = x * y
+        logage_new = (C1 * self.logage_grid[l1feh, l1mass] +
+                      C2 * self.logage_grid[l1feh, l2mass] +
+                      C3 * self.logage_grid[l2feh, l1mass] +
+                      C4 * self.logage_grid[l2feh, l2mass])
+
+        # these arrays now have star id as first axis
+        # and then store the age, logg, logteff, logl for a given mass star
+        # as a function of EEP
+        if np.nanmax(logage_new) < logage:
+            return False
+        return True
 
 
 class Interpolator:

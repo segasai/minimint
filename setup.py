@@ -22,7 +22,7 @@ def get_revision():
                                   stdout=subprocess.PIPE).stdout
         revision = tmpout.read().decode()[:6]
         if len(revision) > 0:
-            ret = '.dev' + revision
+            ret = '+dev' + revision
         else:
             ret = ''
     except:

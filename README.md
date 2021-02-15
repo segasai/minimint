@@ -43,4 +43,8 @@ This returns a dictionary with photometry and logg, logteff, logl and photometry
 
 ## Examples 
 
-See the notebook in the examples/ folder
+See the [notebook](examples/Example.ipynb) in the examples folder
+
+## Synthetic stellar populations
+If you are interested in synthetic stellar populations you will need
+the implementation of the IMF. For this you may want to use https://github.com/keflavich/imf

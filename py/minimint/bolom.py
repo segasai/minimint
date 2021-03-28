@@ -95,6 +95,13 @@ class BCInterpolator:
         size = [len(self.uvecs[_]) for _ in range(ndim)]
         self.filts = filts
         self.dats = {}
+
+        # These are the box coordinates for interpolation
+        # 0,0 1,0, 0,1 1,1
+        self.box_list = []
+        for a in itertools.product(*[[0, 1]] * self.ndim):
+            self.box_list.append(np.array(a))
+
         for f in filts:
             curd = np.zeros(size) - np.nan
             curd[tuple(self.uids)] = np.load(prefix + '/' + FILT_NPY % (f, ))
@@ -103,9 +110,7 @@ class BCInterpolator:
             #    self.uvecs, dats[f], method='linear', bounds_error=False)
 
     def __call__(self, p):
-        # assert arguments is np.log10(tabs['Teff']), tabs['logg'],
-        # tabs['[Fe/H]'], tabs['Av']])
-        # shaped N,4
+        # assert arguments are shaped N,4
         res = {}
         pos1 = np.zeros(p.shape, dtype=int)
         xs = np.zeros(p.shape)
@@ -121,8 +126,7 @@ class BCInterpolator:
 
         curinds = []
         curcoeffs = []
-        for a in itertools.product(*[[0, 1]] * self.ndim):
-            a = np.array(a)
+        for a in self.box_list:
             curinds.append(
                 tuple([(pos1[:, i] + a[i]) for i in range(self.ndim)]))
             curcoeffs.append(
@@ -131,7 +135,7 @@ class BCInterpolator:
         for f in self.filts:
             curres = np.zeros(p.shape[0])
             for curi, curc in zip(curinds, curcoeffs):
-                curres[:] = curres + self.dats[f][curi] * curc
+                curres += self.dats[f][curi] * curc
             res[f] = curres
             res[f][bad] = np.nan
         return res

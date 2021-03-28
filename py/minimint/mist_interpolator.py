@@ -344,8 +344,8 @@ The interpolation is done in two stages:
         l1mass = np.searchsorted(self.umass, mass) - 1
         l2mass = l1mass + 1
         bad = np.zeros(N, dtype=bool)
-        bad = bad | (l2mass >= len(self.umass) - 1) | (
-            l2feh >= len(self.ufeh) - 1) | (l1mass < 0) | (l1feh < 0)
+        bad = bad | (l2mass > len(self.umass) - 1) | (
+            l2feh > len(self.ufeh) - 1) | (l1mass < 0) | (l1feh < 0)
         l1mass[bad] = 0
         l2mass[bad] = 1
         l1feh[bad] = 0
@@ -414,7 +414,7 @@ This checks is the point is valid
         l1mass = np.searchsorted(self.umass, mass) - 1
         l2mass = l1mass + 1
 
-        if ((l2mass >= len(self.umass) - 1) or (l2feh >= len(self.ufeh) - 1)
+        if ((l2mass > len(self.umass) - 1) or (l2feh > len(self.ufeh) - 1)
                 or (l1mass < 0) or (l1feh < 0)):
             return False
         x = (feh - self.ufeh[l1feh]) / (self.ufeh[l2feh] - self.ufeh[l1feh]

@@ -521,9 +521,10 @@ class Interpolator:
         else:
             ret1 = self.isoInt(mass, logage, feh)
         logg, logteff, logl = [ret1[_] for _ in keys]
-        xind = np.isfinite(logl)
+        good_sub = np.isfinite(logl)
         av = feh * 0.
-        arr = np.array([logteff[xind], logg[xind], feh[xind], av[xind]]).T
+        arr = np.array(
+            [logteff[good_sub], logg[good_sub], feh[good_sub], av[good_sub]]).T
         res0 = self.bolomInt(arr)
         res = dict(logg=logg,
                    logteff=logteff,
@@ -531,9 +532,10 @@ class Interpolator:
                    mass=mass,
                    logage=logage,
                    feh=feh)
+        MBolSun = 4.74
         for k in res0:
             res[k] = np.zeros(len(logg)) - np.nan
-            res[k][xind] = 4.74 - 2.5 * (logl[xind]) - res0[k]
+            res[k][good_sub] = MBolSun - 2.5 * logl[good_sub] - res0[k]
         for k in res.keys():
             res[k] = res[k].reshape(shape)
         return res

@@ -68,3 +68,11 @@ def test_example():
     mass = 1.04
     iso1 = ii(mass, lagegrid, -1)
     (iso1['logteff'], iso1['logl'])
+
+    # check high metallicity edge
+    mass = 0.5
+    logagegrid = [7, 8, 9, 10]
+    for lage in logagegrid:
+        for feh in [-3.85, .45]:
+            iso = ii(mass, lage, feh)
+            assert (np.isfinite(iso['DECam_g']))

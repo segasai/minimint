@@ -1,3 +1,4 @@
+import warnings
 import urllib.request
 import tempfile
 import glob
@@ -311,21 +312,41 @@ class TheoryInterpolator:
     def getMaxMass(self, logage, feh):
         """Determine the maximum mass that exists on the current isochrone
 """
+        # The algorithm is the following
+        # we first go over the mass grid find the right one
+        # by binary search
+        # Then we zoom in on that interval and use the fact that inside
+        # that interval we'll have linear dependence of age on mass
         logage, feh = np.float64(logage), np.float64(feh)
         # ensure 64bit float otherwise incosistencies in float computations
         # will kill us
         niter = 40
-        m1 = self.umass[1]
-        m2 = self.umass[-1]
+        im1 = 0
+        # self.umass[1]
+        im2 = len(self.umass) - 1  # self.umass[-1]
         l1feh = np.searchsorted(self.ufeh, feh) - 1
+        if self.__isvalid(self.umass[im2], logage, feh, l1feh=l1feh):
+            return self.umass[im2]
         for i in range(niter):
-            curm = (m1 + m2) / 2.
-            good = self.__isvalid(curm, logage, feh, l1feh=l1feh)
+            curm = (im1 + im2) // 2
+            good = self.__isvalid(self.umass[curm], logage, feh, l1feh=l1feh)
+            # print(im1, im2, good)
             if not good:
-                m1, m2 = m1, curm
+                im1, im2 = im1, curm
             else:
-                m1, m2 = curm, m2
-        return m1
+                im1, im2 = curm, im2
+            if im2 - im1 == 1:
+                break
+        ret = self.__isvalid((self.umass[im1] + self.umass[im2]) / 2.,
+                             logage,
+                             feh,
+                             l1feh=l1feh,
+                             checkMaxMass=True)
+        if not (np.isfinite(ret)):
+            return self.umass[im1]  # the edge
+        else:
+            return ret * (1 - 1e-10)
+        #return self.umass[curm]
 
     def __get_eep_coeffs(self, mass, logage, feh):
         """
@@ -401,7 +422,7 @@ The interpolation is done in two stages:
                     eep1=eep1,
                     eep2=eep2)
 
-    def __isvalid(self, mass, logage, feh, l1feh=None):
+    def __isvalid(self, mass, logage, feh, l1feh=None, checkMaxMass=False):
         """
 This checks is the point is valid
 """
@@ -440,6 +461,25 @@ This checks is the point is valid
                     C3 * self.logage_grid[l2feh, l1mass, i] +
                     C4 * self.logage_grid[l2feh, l2mass, i])
 
+        if checkMaxMass:
+            # here we are trying to find linear solutions
+            # inside each EEP,mass,feh box to match our age
+            # the point where the
+            V11 = self.logage_grid[l1feh, l1mass, :]
+            V12 = self.logage_grid[l1feh, l2mass, :]
+            V21 = self.logage_grid[l2feh, l1mass, :]
+            V22 = self.logage_grid[l2feh, l2mass, :]
+            yy = (logage - V11 *
+                  (1 - x) - V21 * x) / ((V12 - V11) *
+                                        (1 - x) + V22 * x - V21 * x)
+            yy = yy[np.isfinite(yy) & (yy <= 1) & (yy >= 0)]
+            if len(yy) > 0:
+                return self.umass[l1mass] + np.nanmax(
+                    (self.umass[l2mass] - self.umass[l1mass]) * yy)
+            else:
+                # this likely will happen if only *exactly* the edge
+                # works
+                return np.nan
         # check invariants on edges
         if not getAge(i1) <= logage:
             return False

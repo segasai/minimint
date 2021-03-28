@@ -100,8 +100,8 @@ class BCInterpolator:
         # 0,0 1,0, 0,1 1,1
         self.box_list = []
         for a in itertools.product(*[[0, 1]] * self.ndim):
-            self.box_list.append(np.array(a))
-
+            self.box_list.append((a))
+        self.box_list = np.array(self.box_list)
         for f in filts:
             curd = np.zeros(size) - np.nan
             curd[tuple(self.uids)] = np.load(prefix + '/' + FILT_NPY % (f, ))
@@ -126,16 +126,19 @@ class BCInterpolator:
 
         curinds = []
         curcoeffs = []
-        for a in self.box_list:
-            curinds.append(
-                tuple([(pos1[:, i] + a[i]) for i in range(self.ndim)]))
-            curcoeffs.append(
-                (xs**a[None, :] * (1 - xs)**(1 - a[None, :])).prod(axis=1))
-
+        curinds = pos1[None, :, :] + self.box_list[:, None, :]
+        # this is fancy math for the poly linear interpolation
+        # where the value = sum F_j * x**a_j * (1-x)**(1-a_j)
+        # where F_j is the value in the cube vertex
+        # x is the n-dim vector where ieach axis goes from 0 to 1
+        # and a_j are the 0,1 vectors corresponding to the vertices
+        curcoeffs = (
+            xs[None, :, :]**self.box_list[:, None, :] *
+            (1 - xs[None, :, :])**(1 - self.box_list)[:, None, :]).prod(axis=2)
+        curinds1 = np.ravel_multi_index(curinds.T,
+                                        self.dats[list(self.filts)[0]].shape)
         for f in self.filts:
-            curres = np.zeros(p.shape[0])
-            for curi, curc in zip(curinds, curcoeffs):
-                curres += self.dats[f][curi] * curc
+            curres = (self.dats[f].flat[curinds1] * curcoeffs.T).sum(axis=1)
             res[f] = curres
             res[f][bad] = np.nan
         return res

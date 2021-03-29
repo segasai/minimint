@@ -1,4 +1,3 @@
-import warnings
 import urllib.request
 import tempfile
 import glob
@@ -330,7 +329,6 @@ class TheoryInterpolator:
         for i in range(niter):
             curm = (im1 + im2) // 2
             good = self.__isvalid(self.umass[curm], logage, feh, l1feh=l1feh)
-            # print(im1, im2, good)
             if not good:
                 im1, im2 = im1, curm
             else:
@@ -346,7 +344,6 @@ class TheoryInterpolator:
             return self.umass[im1]  # the edge
         else:
             return ret * (1 - 1e-10)
-        #return self.umass[curm]
 
     def __get_eep_coeffs(self, mass, logage, feh):
         """

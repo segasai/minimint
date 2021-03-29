@@ -6,9 +6,11 @@ if  [ `git status --porcelain=v1 | grep -v '^??'|wc -l ` -eq 0 ] ; then echo 'Go
     exit 1;
 } ; fi 
 echo "$VERSION" > version.txt
-echo 'version="'$VERSION'"' > py/minimint/_version.py
-git commit -m "New version $VERSION" -v  py/minimint/_version.py
+echo "committing"
+git commit -m "New version $VERSION" -v version.txt
+echo "tagging"
 git tag $VERSION
+echo "preparing the pypi package"
 rm -rf dist/*
 python setup.py sdist bdist_wheel
 twine check dist/*

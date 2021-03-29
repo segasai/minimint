@@ -30,6 +30,7 @@ jobs:
       - name: Test
         run: |
           pytest --cov=minimint -s
+          pylint -E --disable=E1101 py/minimint/*py
       - name: Coveralls
         if: ${{ success() }}
         run: coveralls --service=github

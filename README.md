@@ -5,7 +5,7 @@ Minimint (MIni Mist INTerpolation)
 
 Software to do simple interpolation of MIST isochrones.
 
-Author: Sergey Koposov (2020) skoposov __AT__ ed __DOT__ ac __DOT__ uk
+Author: Sergey Koposov (2020-2021) skoposov __AT__ ed __DOT__ ac __DOT__ uk
 
 # Instructions 
 
@@ -40,6 +40,10 @@ The interpolator is a callable, so you can call it on mass, log10(age), feh
 ``` ii(mass, logage,feh)``` 
  
 This returns a dictionary with photometry and logg, logteff, logl and photometry.
+
+You also can use the interpolator to find the maximum valid mass on the isochrone.
+
+```ii.getMaxMass(logage, feh)```
 
 ## Examples 
 

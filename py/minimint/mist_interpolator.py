@@ -60,6 +60,8 @@ def read_grid(eep_prefix, outp_prefix):
         tabs0.append(curt)
 
     tabs = atpy.vstack(tabs0)
+    if 'comments' in tabs.meta:
+        del tabs.meta['comments']
     del tabs0
     gc.collect()
     for k in list(tabs.columns):

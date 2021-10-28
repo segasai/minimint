@@ -32,57 +32,6 @@ def read_bolom(filt, iprefix):
     return tabs
 
 
-# Triangulation based interpolator
-class BCInterpolator0:
-    def __init__(self, prefix, filts):
-        vec = np.load(prefix + '/' + POINTS_NPY)
-        if False:
-            st = np.random.get_state()
-            np.random.seed(1)
-            permut = np.random.normal(size=vec.shape) * 1e-5
-            vec = vec + permut  # to avoid exact gridding
-            np.random.set_state(st)
-
-        tri = scipy.spatial.Delaunay(vec.T, qhull_options="QJ Pp")
-        dats = []
-        for f in filts:
-            dats.append(np.load(prefix + '/' + FILT_NPY % (f, )))
-        self.interp = Interpolator0(tri, filts, dats)
-
-    def __call__(self, p):
-        return self.interp(p)
-
-
-class Interpolator0:
-    def __init__(self, triang, filts, dats):
-        self.triang = triang
-        self.dats = {}
-        self.filts = filts
-        for i, f in enumerate(filts):
-            self.dats[f] = dats[i]
-
-    def __call__(self, p):
-        p = np.atleast_2d(p)
-        ndim = self.triang.ndim
-        xid = self.triang.find_simplex(p)
-        goods = (xid != -1)
-        xid = xid[goods]
-        res = {}
-        for f in self.filts:
-            res[f] = np.zeros(len(p)) - np.nan
-
-        # b = self.triang.transform[xid, :ndim, :].dot(p -
-        # self.triang.transform[xid, ndim, :])
-        b = np.einsum('ijk,ik->ij', self.triang.transform[xid, :ndim, :],
-                      p[goods, :] - self.triang.transform[xid, ndim, :])
-        b1 = np.concatenate((b, 1 - b.sum(axis=1)[:, None]), axis=1)
-        for f in self.filts:
-            res[f][goods] = (self.dats[f][self.triang.simplices[xid]] *
-                             b1).sum(axis=1)
-
-        return res
-
-
 class BCInterpolator:
     def __init__(self, prefix, filts):
         filts = set(filts)

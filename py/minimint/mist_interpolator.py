@@ -378,30 +378,54 @@ The interpolation is done in two stages:
         C2 = (1 - x) * y
         C3 = x * (1 - y)
         C4 = x * y
-        logage_new = (C1[:, None] * self.logage_grid[l1feh, l1mass] +
-                      C2[:, None] * self.logage_grid[l1feh, l2mass] +
-                      C3[:, None] * self.logage_grid[l2feh, l1mass] +
-                      C4[:, None] * self.logage_grid[l2feh, l2mass])
-        # these arrays now have star id as first axis
-        # and then store the age, logg, logteff, logl for a given mass star
-        # as a function of EEP
-        large = 1e100
-        good_age = np.isfinite(logage_new)
-        logage_new[~good_age] = large
-        maxep = (good_age * np.arange(self.neep)[None, :]).max(axis=1)
-        eep1 = np.zeros(N, dtype=int)
 
-        # here we are finding the EEP point with the right age
-        for i in range(N):
-            eep1[i] = np.searchsorted(logage_new[i, :], logage[i]) - 1
-        # this needs to be sped up
-        eep2 = eep1 + 1
-        bad = bad | (eep1 < 0) | (eep2 > (maxep))
-        eep1[bad] = 0
-        eep2[bad] = 1
-        ids = np.arange(N)
-        eep_frac = (logage - logage_new[ids, eep1]) / (logage_new[ids, eep2] -
-                                                       logage_new[ids, eep1])
+        # This will be our working subset
+        xind = np.arange(len(mass))
+        # This will be updated mask of bad points outside limits
+        bads = np.zeros(len(mass), dtype=bool)
+        # these will be left/right of the binary search
+        lefts = np.zeros(len(mass), dtype=int)
+        rights = np.zeros(len(mass), dtype=int) + self.neep - 1
+        curlefts = lefts
+        currights = rights
+
+        def FF(curi):
+            return (
+                C1[xind] * self.logage_grid[l1feh[xind], l1mass[xind], curi] +
+                C2[xind] * self.logage_grid[l1feh[xind], l2mass[xind], curi] +
+                C3[xind] * self.logage_grid[l2feh[xind], l1mass[xind], curi] +
+                C4[xind] * self.logage_grid[l2feh[xind], l2mass[xind], curi])
+
+        # binary search
+        while len(xind) > 0:
+            LV, RV = [FF(_) for _ in [curlefts, currights]]
+            LA = logage[xind]
+            props = (curlefts + currights) // 2
+            MV = FF(props)
+            curbad = (LA < LV) | (LA >= RV)  # we'll exclude them
+            bads[xind[curbad]] = True
+            x1 = LA >= MV
+            x2 = LA < MV
+            curlefts[x1] = props[x1]
+            currights[x2] = props[x2]
+            currights[(~x1) & (~x2)] = props[(~x1) & (~x2)]
+            # we stop for either right-left==1 or for bads
+            exclude = (currights == curlefts + 1) | curbad
+            lefts[xind[exclude]] = curlefts[exclude]
+            rights[xind[exclude]] = currights[exclude]
+            xind = xind[~exclude]
+            curlefts = curlefts[~exclude]
+            currights = currights[~exclude]
+
+        bads = bads | (rights >= self.neep)
+        lefts[bads] = 0
+        rights[bads] = 1
+        LV, RV = [(C1 * self.logage_grid[l1feh, l1mass, _] +
+                   C2 * self.logage_grid[l1feh, l2mass, _] +
+                   C3 * self.logage_grid[l2feh, l1mass, _] +
+                   C4 * self.logage_grid[l2feh, l2mass, _])
+                  for _ in [lefts, rights]]
+        eep_frac = (logage - LV) / (RV - LV)
         # eep_frac is the coefficient for interpolation in EEP axis
         # 0<=eep_frac<1
         # eep1 is the position in the EEP axis (essentially floor(EEP))
@@ -411,13 +435,13 @@ The interpolation is done in two stages:
                     C3=C3,
                     C4=C4,
                     eep_frac=eep_frac,
-                    bad=bad,
+                    bad=bads,
                     l1feh=l1feh,
                     l2feh=l2feh,
                     l1mass=l1mass,
                     l2mass=l2mass,
-                    eep1=eep1,
-                    eep2=eep2)
+                    eep1=lefts,
+                    eep2=rights)
 
     def __isvalid(self, mass, logage, feh, l1feh=None, checkMaxMass=False):
         """
@@ -541,7 +565,7 @@ class Interpolator:
         mass, logage, feh = np.broadcast_arrays(mass, logage, feh)
         shape = mass.shape
         mass, logage, feh = [np.atleast_1d(_) for _ in [mass, logage, feh]]
-        maxn = int(1e4)
+        maxn = int(1e6)
         curl = len(mass)
         keys = ['logg', 'logteff', 'logl']
         # split if many are asked

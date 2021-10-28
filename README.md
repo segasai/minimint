@@ -52,3 +52,8 @@ See the [notebook](examples/Example.ipynb) in the examples folder
 ## Synthetic stellar populations
 If you are interested in synthetic stellar populations you will need
 the implementation of the IMF. For this you may want to use https://github.com/keflavich/imf
+
+
+# Acknowledgement
+
+Please cite the usage of this package using the zenodo reference: https://zenodo.org/record/4900576

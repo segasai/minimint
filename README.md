@@ -9,7 +9,7 @@ Author: Sergey Koposov (2020-2021) skoposov __AT__ ed __DOT__ ac __DOT__ uk
 
 # Instructions 
 
-* Install minimint  (clone the repo and do pip install) 
+* Install minimint. You can either pip install the released version or install from github
 
 ```
 pip install minimint
@@ -20,9 +20,9 @@ pip install minimint
 minimint.download_and_prepare()
 ```
 
-That will download everything and process the evolutionary tracks and bolometric corrections by creating the necessary  files for the package.
+That will download everything and process the evolutionary tracks and bolometric corrections by creating the necessary files for the package.
 
-minimint.download_and_prepare() by by default creates bolometric corrections for these filters
+`minimint.download_and_prepare()` by default creates bolometric corrections for these filters
 'DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper','UBVRIplus', 'WISE'
 If you need additional filters, you can specify them using the filters parameter
 

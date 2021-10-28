@@ -2,8 +2,6 @@ import glob
 import itertools
 import re
 import os
-import scipy.interpolate
-import scipy.spatial
 import astropy.table as atpy
 import numpy as np
 from .utils import get_data_path, tail_head

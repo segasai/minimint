@@ -32,23 +32,23 @@ This will take some time (20-30 min) and will use some space (10-30 Gb).
 
 If you want to put those processed isochrone files in a location different from the site-packages folder of minimint, you can use the outp_prefix parameter of `download_and_prepare`. You then will need to either specify the location each time when you construct the interpolators or with the MINIMINT_DATA_PATH environment variable
 
-* Usage 
+# Usage 
 
-In order to create an interpolator object:
+In order to create an interpolator object for two filters (your can provide a list of any numbers of filters)
 
-```i = minimint.Interpolator(['DECam_g','DECam_r'])```
+```ii = minimint.Interpolator(['DECam_g','DECam_r'])```
 
 The interpolator is a callable, so you can call it on mass, log10(age), feh 
 
 ``` ii(mass, logage,feh)``` 
  
-This returns a dictionary with photometry and logg, logteff, logl and photometry.
+This returns a dictionary with photometry, logg, logteff and logl.
 
 You also can use the interpolator to find the maximum valid mass on the isochrone.
 
 ```ii.getMaxMass(logage, feh)```
 
-## Examples 
+# Examples 
 
 See the [notebook](examples/Example.ipynb) in the examples folder
 
@@ -56,7 +56,6 @@ See the [notebook](examples/Example.ipynb) in the examples folder
 If you are interested in synthetic stellar populations you will need
 the implementation of the IMF. For this you may want to use https://github.com/keflavich/imf
 
-
 # Acknowledgement
 
-Please cite the usage of this package using the zenodo reference: https://zenodo.org/record/4900576
+If you are using this package please cite the reference on zenodo: https://zenodo.org/record/4900576

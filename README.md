@@ -30,8 +30,11 @@ If you need additional filters, you can specify them using the filters parameter
 Check which filters are available on the MIST website http://waps.cfa.harvard.edu/MIST/model_grids.html
 This will take some time (20-30 min) and will use some space (10-30 Gb).
 
+If you want to put those processed isochrone files in a location different from the site-packages folder of minimint, you can use the outp_prefix parameter of `download_and_prepare`. You then will need to either specify the location each time when you construct the interpolators or with the MINIMINT_DATA_PATH environment variable
 
-Now you can use the package. In order to create an interpolator object:
+* Usage 
+
+In order to create an interpolator object:
 
 ```i = minimint.Interpolator(['DECam_g','DECam_r'])```
 

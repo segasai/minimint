@@ -245,6 +245,10 @@ class TheoryInterpolator:
             self.neep = D['neep']
 
     def __call__(self, mass, logage, feh):
+        """
+        Return the theoretical isochrone values such as logL, logg, logteff
+        correspoding to the mass, logage and feh
+        """
         feh, mass, logage = [
             np.atleast_1d(np.asarray(_)) for _ in [feh, mass, logage]
         ]
@@ -288,7 +292,7 @@ class TheoryInterpolator:
         return ret
 
     def getMaxMassMS(self, logage, feh):
-        """Find approximately the maximum mass on the main sequence """
+        """Find the approximate value of maximum mass on the main sequence """
         N = len(self.umass) - 1
         i1 = 1
         i2 = N - 1
@@ -311,8 +315,20 @@ class TheoryInterpolator:
         return self.umass[i1]
 
     def getMaxMass(self, logage, feh):
-        """Determine the maximum mass that exists on the current isochrone
-"""
+        """
+        Determine the maximum mass that exists on the current isochrone
+        Parameters:
+        -----------
+        logage: float
+            Log10 of age 
+        feh: float
+            Metallicity
+
+        Returns:
+        --------
+        maxMass: float
+            Maximum mass on the isochrone
+        """
         # The algorithm is the following
         # we first go over the mass grid find the right one
         # by binary search
@@ -447,8 +463,8 @@ The interpolation is done in two stages:
 
     def __isvalid(self, mass, logage, feh, l1feh=None, checkMaxMass=False):
         """
-This checks is the point is valid
-"""
+        Checks if the point on the isochrone is valid
+        """
         mass = np.float64(mass)
         logage = np.float64(logage)
         feh = np.float64(feh)

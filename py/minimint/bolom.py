@@ -11,11 +11,23 @@ FILT_NPY = 'filt_%s.npy'
 
 
 def read_bolom(filt, iprefix):
+    """
+    Read the bolometric corrections files for 
+    a given filter system.
+
+    Parameters:
+    -----------
+    
+    filt: string
+        Filter system/group like UBVRIplus or WISE
+    iprefix: string
+        Location of the bc correction files
+    """
     fs = sorted(glob.glob('%s/*%s' % (iprefix, filt)))
     if len(fs) == 0:
-        print('Filter system %s bolometric correction not found in %s' %
-              (filt, iprefix))
-        raise RuntimeError('err')
+        raise RuntimeError(
+            'Filter system %s bolometric correction not found in %s' %
+            (filt, iprefix))
     tmpfile = tail_head(fs[0], 5, 10)
     tab0 = atpy.Table().read(tmpfile, format='ascii.fast_commented_header')
     os.unlink(tmpfile)
@@ -92,6 +104,10 @@ class BCInterpolator:
 
 
 def list_filters(path=None):
+    """
+    Return the list of photometric filters for which the isochrones
+    can be constructed
+    """
     if path is None:
         path = get_data_path()
 

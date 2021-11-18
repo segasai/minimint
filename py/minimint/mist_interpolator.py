@@ -1,9 +1,10 @@
-import urllib.request
 import tempfile
+import warnings
 import glob
 import os
 import gc
 import pickle
+import urllib.request
 import astropy.table as atpy
 import scipy.interpolate
 import numpy as np
@@ -508,9 +509,13 @@ The interpolation is done in two stages:
             V12 = self.logage_grid[l1feh, l2mass, :]
             V21 = self.logage_grid[l2feh, l1mass, :]
             V22 = self.logage_grid[l2feh, l2mass, :]
-            yy = (logage - V11 *
-                  (1 - x) - V21 * x) / ((V12 - V11) *
-                                        (1 - x) + V22 * x - V21 * x)
+            with warnings.catch_warnings():
+                # protect against warnings here because we
+                # are actively searching for valid range
+                warnings.simplefilter("ignore")
+                yy = (logage - V11 *
+                      (1 - x) - V21 * x) / ((V12 - V11) *
+                                            (1 - x) + V22 * x - V21 * x)
             yy = yy[np.isfinite(yy) & (yy <= 1) & (yy >= 0)]
             if len(yy) > 0:
                 return self.umass[l1mass] + np.nanmax(

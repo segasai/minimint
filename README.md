@@ -58,4 +58,5 @@ the implementation of the IMF. For this you may want to use https://github.com/k
 
 # Acknowledgement
 
-If you are using this package please cite the reference on zenodo: https://zenodo.org/record/4900576
+If you are using this package please cite it through zenodo
+https://doi.org/10.5281/zenodo.4002971

@@ -12,12 +12,12 @@ FILT_NPY = 'filt_%s.npy'
 
 def read_bolom(filt, iprefix):
     """
-    Read the bolometric corrections files for 
+    Read the bolometric corrections files for
     a given filter system.
 
     Parameters:
     -----------
-    
+
     filt: string
         Filter system/group like UBVRIplus or WISE
     iprefix: string
@@ -43,6 +43,7 @@ def read_bolom(filt, iprefix):
 
 
 class BCInterpolator:
+
     def __init__(self, prefix, filts):
         filts = set(filts)
         vec = np.load(prefix + '/' + POINTS_NPY)
@@ -69,6 +70,13 @@ class BCInterpolator:
             #    self.uvecs, dats[f], method='linear', bounds_error=False)
 
     def __call__(self, p):
+        """
+        Return bolometric corrections given the stellar parameters
+        The input is an array shaped Nx4
+        where the 4 dimensions corresponds to
+        logteff, log ,feh, A_V
+        and N for the number of stars
+        """
         # assert arguments are shaped N,4
         res = {}
         pos1 = np.zeros(p.shape, dtype=int)

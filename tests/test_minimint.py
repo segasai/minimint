@@ -76,3 +76,5 @@ def test_example():
         for feh in [-3.85, .45]:
             iso = ii(mass, lage, feh)
             assert (np.isfinite(iso['DECam_g']))
+
+    ii.isoInt.getLogAgeFromEEP(1, 140, -1, True)

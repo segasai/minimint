@@ -221,6 +221,7 @@ def prepare(eep_prefix,
 
 
 class TheoryInterpolator:
+
     def __init__(self, prefix=None):
         """
         Construct the interpolator that computes theoretical
@@ -290,6 +291,64 @@ class TheoryInterpolator:
         for k in ['logg', 'logteff', 'logl', 'phase']:
             ret[k] = np.zeros(N) + np.nan
             ret[k][good] = xret[k]
+        return ret
+
+    def getLogAgeFromEEP(self, mass, eep, feh, returnJac=False):
+        """
+        This method returns the log(age) for given mass eep and feh
+
+        if returnJac is true the derivative is of d(log(age))/deep is returned
+        """
+        feh, mass, eep = [
+            np.atleast_1d(np.asarray(_, dtype=np.float64))
+            for _ in [feh, mass, eep]
+        ]
+        neep = 1710
+        N = len(feh)
+        l1feh = np.searchsorted(self.ufeh, feh) - 1
+        l2feh = l1feh + 1
+        l1mass = np.searchsorted(self.umass, mass) - 1
+        l2mass = l1mass + 1
+        bad = np.zeros(N, dtype=bool)
+        eep1 = eep.astype(int)
+        eep2 = eep1 + 1
+        bad = bad | (l2mass >= len(self.umass)) | (l2feh >= len(self.ufeh)) | (
+            l1mass < 0) | (l1feh < 0) | (eep2 >= neep) | (eep1 < 0)
+        l1mass[bad] = 0
+        l2mass[bad] = 1
+        l1feh[bad] = 0
+        l2feh[bad] = 1
+        eep1[bad] = 0
+        eep2[bad] = 1
+        eep_frac = (eep - eep1)
+        x = (feh - self.ufeh[l1feh]) / (self.ufeh[l2feh] - self.ufeh[l1feh]
+                                        )  # from 0 to 1
+        y = (mass - self.umass[l1mass]) / (
+            self.umass[l2mass] - self.umass[l1mass])  # from 0 to 1
+        # this is now bilinear interpolation in the space of mass/metallicity
+        C1 = (1 - x) * (1 - y)
+        C2 = (1 - x) * y
+        C3 = x * (1 - y)
+        C4 = x * y
+        xind = ~bad
+
+        def FF(curi):
+            return (
+                C1[xind] * self.logage_grid[l1feh[xind], l1mass[xind], curi] +
+                C2[xind] * self.logage_grid[l1feh[xind], l2mass[xind], curi] +
+                C3[xind] * self.logage_grid[l2feh[xind], l1mass[xind], curi] +
+                C4[xind] * self.logage_grid[l2feh[xind], l2mass[xind], curi])
+
+        retage = mass * 0
+        Fe1 = FF(eep1)
+        Fe2 = FF(eep2)
+        retage[xind] = Fe1 * (1 - eep_frac) + (eep_frac) * Fe2
+        if returnJac:
+            jac = mass * 0
+            jac[xind] = Fe2 - Fe1
+            ret = (retage, jac)
+        else:
+            ret = retage
         return ret
 
     def getMaxMassMS(self, logage, feh):
@@ -550,6 +609,7 @@ The interpolation is done in two stages:
 
 
 class Interpolator:
+
     def __init__(self, filts, data_prefix=None):
         """
         Initialize the interpolator class, specifying filter names

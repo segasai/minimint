@@ -473,13 +473,13 @@ The interpolation is done in two stages:
         l2feh = l1feh + 1
         l1mass = np.searchsorted(self.umass, mass) - 1
         l2mass = l1mass + 1
-        bad = np.zeros(N, dtype=bool)
-        bad = bad | (l2mass >= len(self.umass)) | (l2feh >= len(
+        bads0 = np.zeros(N, dtype=bool)
+        bads0 = bads0 | (l2mass >= len(self.umass)) | (l2feh >= len(
             self.ufeh)) | (l1mass < 0) | (l1feh < 0)
-        l1mass[bad] = 0
-        l2mass[bad] = 1
-        l1feh[bad] = 0
-        l2feh[bad] = 1
+        l1mass[bads0] = 0
+        l2mass[bads0] = 1
+        l1feh[bads0] = 0
+        l2feh[bads0] = 1
 
         x = (feh - self.ufeh[l1feh]) / (self.ufeh[l2feh] - self.ufeh[l1feh]
                                         )  # from 0 to 1
@@ -499,7 +499,7 @@ The interpolation is done in two stages:
                 C4[xind] * self.logage_grid[l2feh[xind], l2mass[xind], curi])
 
         lefts, rights, bads = _binary_search(mass, logage, self.neep, FF)
-        bads = bads | (rights >= self.neep)
+        bads = bads0 | bads | (rights >= self.neep)
         lefts[bads] = 0
         rights[bads] = 1
         LV, RV = [(C1 * self.logage_grid[l1feh, l1mass, _] +

@@ -350,7 +350,7 @@ class TheoryInterpolator:
             np.atleast_1d(np.asarray(_)) for _ in [feh, mass, logage]
         ]
         N = len(logage)
-        DD = self.__get_eep_coeffs(mass, logage, feh)
+        DD = self._get_eep_coeffs(mass, logage, feh)
         C11, C12, C21, C22 = (DD['C11'], DD['C12'], DD['C21'], DD['C22'])
         l1feh, l2feh, l1mass, l2mass = (DD['l1feh'], DD['l2feh'], DD['l1mass'],
                                         DD['l2mass'])
@@ -452,7 +452,7 @@ class TheoryInterpolator:
             ix = (i1 + i2) // 2
             if (i2 - i1) == 1:
                 stop = True
-            R = self.__get_eep_coeffs(self.umass[ix], logage, feh)
+            R = self._get_eep_coeffs(self.umass[ix], logage, feh)
             eep = R['eep1']
             bad = R['bad'][0]
             phase = max(self.phase_grid[R['l1feh'], R['l1mass'], eep],
@@ -504,13 +504,13 @@ class TheoryInterpolator:
                 im1, im2 = curm, im2
             if im2 - im1 == 1:
                 break
-        ret = self.__getMaxMassBox(logage, feh, l1feh, l1feh + 1, im1, im2)
+        ret = self._getMaxMassBox(logage, feh, l1feh, l1feh + 1, im1, im2)
         if not (np.isfinite(ret)):
             return self.umass[im1]  # the edge
         else:
             return ret * (1 - 1e-10)
 
-    def __get_eep_coeffs(self, mass, logage, feh):
+    def _get_eep_coeffs(self, mass, logage, feh):
         """
         This function gets all the necessary coefficients for the interpolation
 The interpolation is done in two stages:
@@ -630,7 +630,7 @@ The interpolation is done in two stages:
             return False
         return True
 
-    def __getMaxMassBox(self, logage, feh, l1feh, l2feh, l1mass, l2mass):
+    def _getMaxMassBox(self, logage, feh, l1feh, l2feh, l1mass, l2mass):
         # here we are trying to find linear solutions
         # inside each EEP,mass,feh box to match our age
 

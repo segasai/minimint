@@ -225,12 +225,12 @@ def _binary_search(mass, bads, logage, neep, FF):
     curgood = np.nonzero(~bads)[0]
     # these will be left/right of the binary search
     lefts = np.zeros(len(mass), dtype=int)
-    rights = np.zeros(len(mass), dtype=int) + neep - 1
+    rights = np.zeros(len(mass), dtype=int) + neep - 1  # the last index
     curlefts = lefts[curgood]
     currights = rights[curgood]
 
     # binary search
-    while len(curgood) > 0:
+    while True:
         LV, RV = [FF(_, curgood) for _ in [curlefts, currights]]
         LA = logage[curgood]
         props = (curlefts + currights) // 2
@@ -246,6 +246,8 @@ def _binary_search(mass, bads, logage, neep, FF):
         exclude = (currights == curlefts + 1) | curbad
         lefts[curgood[exclude]] = curlefts[exclude]
         rights[curgood[exclude]] = currights[exclude]
+        if exclude.all():
+            break
         curgood = curgood[~exclude]
         curlefts = curlefts[~exclude]
         currights = currights[~exclude]
@@ -503,11 +505,10 @@ The interpolation is done in two stages:
                     self.logage_grid[l2feh[subset], l2mass[subset], curi])
 
         lefts, rights, bads = _binary_search(mass, bads, logage, self.neep, FF)
-        LV, RV = [(C1 * self.logage_grid[l1feh, l1mass, _] +
-                   C2 * self.logage_grid[l1feh, l2mass, _] +
-                   C3 * self.logage_grid[l2feh, l1mass, _] +
-                   C4 * self.logage_grid[l2feh, l2mass, _])
-                  for _ in [lefts, rights]]
+        LV = np.zeros(len(mass))
+        RV = LV + 1
+        LV[~bads] = FF(lefts[~bads], ~bads)
+        RV[~bads] = FF(rights[~bads], ~bads)
         eep_frac = (logage - LV) / (RV - LV)
         # eep_frac is the coefficient for interpolation in EEP axis
         # 0<=eep_frac<1

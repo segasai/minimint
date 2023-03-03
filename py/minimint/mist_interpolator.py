@@ -9,6 +9,26 @@ import astropy.table as atpy
 import scipy.interpolate
 import numpy as np
 from minimint import bolom, utils
+"""
+Here we are often relying on bilinear interpolation
+If the values at grid points  are 
+X_k, Y_k -> V_11
+X_k+1, Y_k -> V_21
+X_k, Y_k+1 -> V_12
+X_k+1, Y_k+1 -> V_22
+
+Then the value within the cube can be written as 
+
+V_11 * ( 1-x) *(1-y) + V_22 * xy + 
+V_21 * x * (1-y) + V_12 * (1-x)* y
+
+where x,y are normalized coordinates 
+x = (X-X_k)/(X_{k+1}-X_k)
+y = (Y-Y_k)/(Y_{k+1}-Y_k)
+
+Typically throughout the code the metallicity is the first axis
+and mass is the second axis
+"""
 
 TRACKS_FILE = 'tracks.fits'
 
@@ -227,35 +247,72 @@ def _binary_search(mass, bads, logage, neep, FF):
     # these will be left/right of the binary search
     lefts = np.zeros(len(mass), dtype=int)
     rights = np.zeros(len(mass), dtype=int) + neep - 1  # the last index
-    curlefts = lefts[curgood]
-    currights = rights[curgood]
+    leftX = lefts[curgood]
+    rightX = rights[curgood]
 
     # binary search
+    # we are dealing with values that should increase till they become nan
+    # we start with LV, RV sitting at the edges
+    # at each iteration we propose a midpt to be prop_V (LV+RV)//2
+    # Then the options are
+    # 1) it's smaller than the target value
+    # 2) it's larger than the target value
+    # 3) it's nan
+    # if 1 we set the new left edge to the proposed point
+    # if 2 we set the right edge to the proposed point
+    # if 3 we do the same as 2
+
+    # we stop when we find
+    # the boundaries to be separated by one and then the options is
+    # A we either in the situation of boundaries having
+    # 2 finite values or
+    # B one finite on the left and the other one nan
+
     while True:
-        LV, RV = [FF(_, curgood) for _ in [curlefts, currights]]
-        LA = logage[curgood]
-        props = (curlefts + currights) // 2
-        MV = FF(props, curgood)
-        curbad = (LA < LV) | (LA >= RV)  # we'll exclude them
-        bads[curgood[curbad]] = True
-        x1 = LA >= MV
-        x2 = LA < MV
-        curlefts[x1] = props[x1]
-        currights[x2] = props[x2]
-        currights[(~x1) & (~x2)] = props[(~x1) & (~x2)]
+        leftY, rightY = [FF(_, curgood) for _ in [leftX, rightX]]
+        targY = logage[curgood]
+
+        propX = (leftX + rightX) // 2
+        propY = FF(propX, curgood)
+
+        # It is written in this way to also include nans
+        x1 = propY <= targY  # option 1
+        x2 = propY > targY  # option 2
+        x3 = (~x1) & (~x2)  # option 3
+        leftX[x1] = propX[x1]
+        rightX[x2] = propX[x2]
+        rightX[x3] = propX[x3]
         # we stop for either right-left==1 or for bads
-        exclude = (currights == curlefts + 1) | curbad
-        lefts[curgood[exclude]] = curlefts[exclude]
-        rights[curgood[exclude]] = currights[exclude]
+        curbad = (targY < leftY) | (targY >= rightY)  # we'll exclude them
+        curbad2 = (rightX == leftX + 1) & np.isnan(rightY)  # this is option B
+        exclude = (rightX == leftX + 1) | curbad | curbad2
+        lefts[curgood[exclude]] = leftX[exclude]
+        rights[curgood[exclude]] = rightX[exclude]
+        bads[curgood[curbad | curbad2]] = True
         if exclude.all():
             break
         curgood = curgood[~exclude]
-        curlefts = curlefts[~exclude]
-        currights = currights[~exclude]
+        leftX = leftX[~exclude]
+        rightX = rightX[~exclude]
     bads = bads | (rights >= neep)
     lefts[bads] = 0
     rights[bads] = 1
     return lefts, rights, bads
+
+
+def _get_polylin_coeff(feh, ufeh, mass, umass, feh_ind1, feh_ind2, mass_ind1,
+                       mass_ind2):
+
+    x = (feh - ufeh[feh_ind1]) / (ufeh[feh_ind2] - ufeh[feh_ind1])
+    # from 0 to 1
+    y = (mass - umass[mass_ind1]) / (umass[mass_ind1] - umass[mass_ind2]
+                                     )  # from 0 to 1
+    # this is now bilinear interpolation in the space of mass/metallicity
+    C11 = (1 - x) * (1 - y)
+    C12 = (1 - x) * y
+    C21 = x * (1 - y)
+    C22 = x * y
+    return C11, C12, C21, C22
 
 
 class TheoryInterpolator:
@@ -294,16 +351,16 @@ class TheoryInterpolator:
         ]
         N = len(logage)
         DD = self.__get_eep_coeffs(mass, logage, feh)
-        C1, C2, C3, C4 = (DD['C1'], DD['C2'], DD['C3'], DD['C4'])
+        C11, C12, C21, C22 = (DD['C11'], DD['C12'], DD['C21'], DD['C22'])
         l1feh, l2feh, l1mass, l2mass = (DD['l1feh'], DD['l2feh'], DD['l1mass'],
                                         DD['l2mass'])
         eep1, eep2, eep_frac, bad = (DD['eep1'], DD['eep2'], DD['eep_frac'],
                                      DD['bad'])
         good = ~bad
-        (C1_good, C2_good, C3_good, C4_good, l1feh_good, l2feh_good,
+        (C11_good, C12_good, C21_good, C22_good, l1feh_good, l2feh_good,
          l1mass_good, l2mass_good, eep1_good, eep2_good, eep_frac_good) = [
              _[good] for _ in [
-                 C1, C2, C3, C4, l1feh, l2feh, l1mass, l2mass, eep1, eep2,
+                 C11, C12, C21, C22, l1feh, l2feh, l1mass, l2mass, eep1, eep2,
                  eep_frac
              ]
          ]
@@ -314,14 +371,15 @@ class TheoryInterpolator:
             'phase': self.phase_grid
         }
         xret = {}
+        print(eep1_good, eep2_good)
         for curkey, curarr in DD.items():
             curr = []
             for j, cureep in enumerate([eep1_good, eep2_good]):
                 curr.append(
-                    (C1_good * curarr[l1feh_good, l1mass_good, cureep] +
-                     C2_good * curarr[l1feh_good, l2mass_good, cureep] +
-                     C3_good * curarr[l2feh_good, l1mass_good, cureep] +
-                     C4_good * curarr[l2feh_good, l2mass_good, cureep]))
+                    (C11_good * curarr[l1feh_good, l1mass_good, cureep] +
+                     C12_good * curarr[l1feh_good, l2mass_good, cureep] +
+                     C21_good * curarr[l2feh_good, l1mass_good, cureep] +
+                     C22_good * curarr[l2feh_good, l2mass_good, cureep]))
             xret[curkey] = curr[0] + eep_frac_good * (curr[1] - curr[0])
             # perfoming the linear interpolation with age
 
@@ -359,23 +417,18 @@ class TheoryInterpolator:
         eep1[bad] = 0
         eep2[bad] = 1
         eep_frac = (eep - eep1)
-        x = (feh - self.ufeh[l1feh]) / (self.ufeh[l2feh] - self.ufeh[l1feh]
-                                        )  # from 0 to 1
-        y = (mass - self.umass[l1mass]) / (
-            self.umass[l2mass] - self.umass[l1mass])  # from 0 to 1
-        # this is now bilinear interpolation in the space of mass/metallicity
-        C1 = (1 - x) * (1 - y)
-        C2 = (1 - x) * y
-        C3 = x * (1 - y)
-        C4 = x * y
+        C11, C12, C21, C22 = _get_polylin_coeff(feh, self.ufeh, mass,
+                                                self.umass, l1feh, l2feh,
+                                                l1mass, l2mass)
+
         xind = ~bad
 
         def FF(curi):
             return (
-                C1[xind] * self.logage_grid[l1feh[xind], l1mass[xind], curi] +
-                C2[xind] * self.logage_grid[l1feh[xind], l2mass[xind], curi] +
-                C3[xind] * self.logage_grid[l2feh[xind], l1mass[xind], curi] +
-                C4[xind] * self.logage_grid[l2feh[xind], l2mass[xind], curi])
+                C11[xind] * self.logage_grid[l1feh[xind], l1mass[xind], curi] +
+                C12[xind] * self.logage_grid[l1feh[xind], l2mass[xind], curi] +
+                C21[xind] * self.logage_grid[l2feh[xind], l1mass[xind], curi] +
+                C22[xind] * self.logage_grid[l2feh[xind], l2mass[xind], curi])
 
         retage = mass * 0
         Fe1 = FF(eep1)
@@ -440,22 +493,18 @@ class TheoryInterpolator:
         # self.umass[1]
         im2 = len(self.umass) - 1  # self.umass[-1]
         l1feh = np.searchsorted(self.ufeh, feh) - 1
-        if self.__isvalid(self.umass[im2], logage, feh, l1feh=l1feh):
+        if self._isvalid(self.umass[im2], logage, feh, l1feh=l1feh):
             return self.umass[im2]
         for i in range(niter):
             curm = (im1 + im2) // 2
-            good = self.__isvalid(self.umass[curm], logage, feh, l1feh=l1feh)
+            good = self._isvalid(self.umass[curm], logage, feh, l1feh=l1feh)
             if not good:
                 im1, im2 = im1, curm
             else:
                 im1, im2 = curm, im2
             if im2 - im1 == 1:
                 break
-        ret = self.__isvalid((self.umass[im1] + self.umass[im2]) / 2.,
-                             logage,
-                             feh,
-                             l1feh=l1feh,
-                             checkMaxMass=True)
+        ret = self.__getMaxMassBox(logage, feh, l1feh, l1feh + 1, im1, im2)
         if not (np.isfinite(ret)):
             return self.umass[im1]  # the edge
         else:
@@ -465,7 +514,7 @@ class TheoryInterpolator:
         """
         This function gets all the necessary coefficients for the interpolation
 The interpolation is done in two stages:
-1) Bilinear integration over mass, feh with coefficients C1,C2,C3,C4
+1) Bilinear integration over mass, feh with coefficients C11,C12,C21,C22
 2) Then there is a final interpolation over EEP axis
 """
         feh, mass, logage = [
@@ -485,27 +534,22 @@ The interpolation is done in two stages:
         l1feh[bads] = 0
         l2feh[bads] = 1
 
-        x = (feh - self.ufeh[l1feh]) / (self.ufeh[l2feh] - self.ufeh[l1feh]
-                                        )  # from 0 to 1
-        y = (mass - self.umass[l1mass]) / (
-            self.umass[l2mass] - self.umass[l1mass])  # from 0 to 1
-        # this is now bilinear interpolation in the space of mass/metallicity
-        C1 = (1 - x) * (1 - y)
-        C2 = (1 - x) * y
-        C3 = x * (1 - y)
-        C4 = x * y
+        C11, C12, C21, C22 = _get_polylin_coeff(feh, self.ufeh, mass,
+                                                self.umass, l1feh, l2feh,
+                                                l1mass, l2mass)
 
         def FF(curi, subset):
-            return (C1[subset] *
+            return (C11[subset] *
                     self.logage_grid[l1feh[subset], l1mass[subset], curi] +
-                    C2[subset] *
+                    C12[subset] *
                     self.logage_grid[l1feh[subset], l2mass[subset], curi] +
-                    C3[subset] *
+                    C21[subset] *
                     self.logage_grid[l2feh[subset], l1mass[subset], curi] +
-                    C4[subset] *
+                    C22[subset] *
                     self.logage_grid[l2feh[subset], l2mass[subset], curi])
 
         lefts, rights, bads = _binary_search(mass, bads, logage, self.neep, FF)
+        #1 / 0
         LV = np.zeros(len(mass))
         RV = LV + 1
         LV[~bads] = FF(lefts[~bads], ~bads)
@@ -515,10 +559,10 @@ The interpolation is done in two stages:
         # 0<=eep_frac<1
         # eep1 is the position in the EEP axis (essentially floor(EEP))
         # 0<=eep1<neep
-        return dict(C1=C1,
-                    C2=C2,
-                    C3=C3,
-                    C4=C4,
+        return dict(C11=C11,
+                    C12=C12,
+                    C21=C21,
+                    C22=C22,
                     eep_frac=eep_frac,
                     bad=bads,
                     l1feh=l1feh,
@@ -528,7 +572,7 @@ The interpolation is done in two stages:
                     eep1=lefts,
                     eep2=rights)
 
-    def __isvalid(self, mass, logage, feh, l1feh=None, checkMaxMass=False):
+    def _isvalid(self, mass, logage, feh, l1feh=None):
         """
         Checks if the point on the isochrone is valid
         """
@@ -544,15 +588,10 @@ The interpolation is done in two stages:
         if ((l2mass >= len(self.umass)) or (l2feh >= len(self.ufeh))
                 or (l1mass < 0) or (l1feh < 0)):
             return False
-        x = (feh - self.ufeh[l1feh]) / (self.ufeh[l2feh] - self.ufeh[l1feh]
-                                        )  # from 0 to 1
-        y = (mass - self.umass[l1mass]) / (
-            self.umass[l2mass] - self.umass[l1mass])  # from 0 to 1
-        # this is now bilinear interpolation in the space of mass/metallicity
-        C1 = (1 - x) * (1 - y)
-        C2 = (1 - x) * y
-        C3 = x * (1 - y)
-        C4 = x * y
+        C11, C12, C21, C22 = _get_polylin_coeff(feh, self.ufeh, mass,
+                                                self.umass, l1feh, l2feh,
+                                                l1mass, l2mass)
+
         # we want to find there is a point i in the age grid
         # where grid[i]<=logage<grid[i+1]
         # and grid[i+1] is not nan
@@ -562,34 +601,11 @@ The interpolation is done in two stages:
         i1, i2 = 0, self.neep - 1
 
         def getAge(i):
-            return (C1 * self.logage_grid[l1feh, l1mass, i] +
-                    C2 * self.logage_grid[l1feh, l2mass, i] +
-                    C3 * self.logage_grid[l2feh, l1mass, i] +
-                    C4 * self.logage_grid[l2feh, l2mass, i])
+            return (C11 * self.logage_grid[l1feh, l1mass, i] +
+                    C12 * self.logage_grid[l1feh, l2mass, i] +
+                    C21 * self.logage_grid[l2feh, l1mass, i] +
+                    C22 * self.logage_grid[l2feh, l2mass, i])
 
-        if checkMaxMass:
-            # here we are trying to find linear solutions
-            # inside each EEP,mass,feh box to match our age
-            # the point where the
-            V11 = self.logage_grid[l1feh, l1mass, :]
-            V12 = self.logage_grid[l1feh, l2mass, :]
-            V21 = self.logage_grid[l2feh, l1mass, :]
-            V22 = self.logage_grid[l2feh, l2mass, :]
-            with warnings.catch_warnings():
-                # protect against warnings here because we
-                # are actively searching for valid range
-                warnings.simplefilter("ignore")
-                yy = (logage - V11 *
-                      (1 - x) - V21 * x) / ((V12 - V11) *
-                                            (1 - x) + V22 * x - V21 * x)
-            yy = yy[np.isfinite(yy) & (yy <= 1) & (yy >= 0)]
-            if len(yy) > 0:
-                return self.umass[l1mass] + np.nanmax(
-                    (self.umass[l2mass] - self.umass[l1mass]) * yy)
-            else:
-                # this likely will happen if only *exactly* the edge
-                # works
-                return np.nan
         # check invariants on edges
         if not getAge(i1) <= logage:
             return False
@@ -613,6 +629,33 @@ The interpolation is done in two stages:
         if np.isnan(getAge(i2)):
             return False
         return True
+
+    def __getMaxMassBox(self, logage, feh, l1feh, l2feh, l1mass, l2mass):
+        # here we are trying to find linear solutions
+        # inside each EEP,mass,feh box to match our age
+
+        x = (feh - self.ufeh[l1feh]) / (self.ufeh[l2feh] - self.ufeh[l1feh])
+        # from 0 to 1
+
+        V11 = self.logage_grid[l1feh, l1mass, :]
+        V12 = self.logage_grid[l1feh, l2mass, :]
+        V21 = self.logage_grid[l2feh, l1mass, :]
+        V22 = self.logage_grid[l2feh, l2mass, :]
+        with warnings.catch_warnings():
+            # protect against warnings here because we
+            # are actively searching for valid range
+            warnings.simplefilter("ignore")
+            yy = (logage - V11 *
+                  (1 - x) - V21 * x) / ((V12 - V11) *
+                                        (1 - x) + V22 * x - V21 * x)
+        yy = yy[np.isfinite(yy) & (yy <= 1) & (yy >= 0)]
+        if len(yy) > 0:
+            return self.umass[l1mass] + np.nanmax(
+                (self.umass[l2mass] - self.umass[l1mass]) * yy)
+        else:
+            # this likely will happen if only *exactly* the edge
+            # works
+            return np.nan
 
 
 class Interpolator:

@@ -208,6 +208,7 @@ def prepare(eep_prefix,
         grid3d_filler(grid)
 
         if k == 'phase':
+            grid[~np.isfinite(grid)] = -99
             grid = np.round(grid).astype(np.int8)
         if k == 'logage':
             grid[:, :, :] = np.cumsum(grid, axis=2)

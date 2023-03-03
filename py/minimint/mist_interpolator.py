@@ -371,7 +371,6 @@ class TheoryInterpolator:
             'phase': self.phase_grid
         }
         xret = {}
-        print(eep1_good, eep2_good)
         for curkey, curarr in DD.items():
             curr = []
             for j, cureep in enumerate([eep1_good, eep2_good]):

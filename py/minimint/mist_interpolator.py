@@ -696,27 +696,26 @@ class Interpolator:
         mass, logage, feh = np.broadcast_arrays(mass, logage, feh)
         shape = mass.shape
         mass, logage, feh = [np.atleast_1d(_) for _ in [mass, logage, feh]]
-        keys = ['logg', 'logteff', 'logl']
-        ret1 = self.isoInt(mass, logage, feh)
-        logg, logteff, logl = [ret1[_] for _ in keys]
-        good_sub = np.isfinite(logl)
-        av = feh * 0.
-        arr = np.array(
-            [logteff[good_sub], logg[good_sub], feh[good_sub], av[good_sub]]).T
+
+        ret = self.isoInt(mass, logage, feh)
+        good_sub = np.isfinite(ret['logl'])
+
+        av = ret['logl'][good_sub] * 0
+        # computing when no extinction
+        arr = np.array([
+            ret['logteff'][good_sub], ret['logg'][good_sub], feh[good_sub], av
+        ]).T
         res0 = self.bolomInt(arr)
-        res = dict(logg=logg,
-                   logteff=logteff,
-                   logl=logl,
-                   mass=mass,
-                   logage=logage,
-                   feh=feh)
+        ret['logage'] = logage
+        ret['feh'] = feh
+        ret['mass'] = mass
         MBolSun = 4.74
         for k in res0:
-            res[k] = np.zeros(len(logg)) - np.nan
-            res[k][good_sub] = MBolSun - 2.5 * logl[good_sub] - res0[k]
-        for k in res.keys():
-            res[k] = res[k].reshape(shape)
-        return res
+            ret[k] = np.zeros(len(mass)) - np.nan
+            ret[k][good_sub] = MBolSun - 2.5 * ret['logl'][good_sub] - res0[k]
+        for k in ret.keys():
+            ret[k] = ret[k].reshape(shape)
+        return ret
 
     def getMaxMass(self, logage, feh):
         """ Return the maximum mass on a given isochrone """

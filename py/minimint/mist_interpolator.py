@@ -305,7 +305,7 @@ def _get_polylin_coeff(feh, ufeh, mass, umass, feh_ind1, feh_ind2, mass_ind1,
 
     x = (feh - ufeh[feh_ind1]) / (ufeh[feh_ind2] - ufeh[feh_ind1])
     # from 0 to 1
-    y = (mass - umass[mass_ind1]) / (umass[mass_ind1] - umass[mass_ind2]
+    y = (mass - umass[mass_ind1]) / (umass[mass_ind2] - umass[mass_ind1]
                                      )  # from 0 to 1
     # this is now bilinear interpolation in the space of mass/metallicity
     C11 = (1 - x) * (1 - y)
@@ -548,7 +548,6 @@ The interpolation is done in two stages:
                     self.logage_grid[l2feh[subset], l2mass[subset], curi])
 
         lefts, rights, bads = _binary_search(mass, bads, logage, self.neep, FF)
-        #1 / 0
         LV = np.zeros(len(mass))
         RV = LV + 1
         LV[~bads] = FF(lefts[~bads], ~bads)

@@ -11,18 +11,18 @@ import numpy as np
 from minimint import bolom, utils
 """
 Here we are often relying on bilinear interpolation
-If the values at grid points  are 
+If the values at grid points  are
 X_k, Y_k -> V_11
 X_k+1, Y_k -> V_21
 X_k, Y_k+1 -> V_12
 X_k+1, Y_k+1 -> V_22
 
-Then the value within the cube can be written as 
+Then the value within the cube can be written as
 
-V_11 * ( 1-x) *(1-y) + V_22 * xy + 
+V_11 * ( 1-x) *(1-y) + V_22 * xy +
 V_21 * x * (1-y) + V_12 * (1-x)* y
 
-where x,y are normalized coordinates 
+where x,y are normalized coordinates
 x = (X-X_k)/(X_{k+1}-X_k)
 y = (Y-Y_k)/(Y_{k+1}-Y_k)
 
@@ -241,12 +241,21 @@ def prepare(eep_prefix,
     bolom.prepare(bolom_prefix, outp_prefix, filters)
 
 
-def _binary_search(mass, bads, logage, neep, FF):
+def _binary_search(bads, logage, neep, FF):
+    """
+    Peform a binary search on a grid to find pts
+    such as FF(pt)<logage<FF(pt+1)
+
+    Returns:
+    lefts:
+    rigths:
+    bads:
+    """
     # This will be our working subset
     curgood = np.nonzero(~bads)[0]
     # these will be left/right of the binary search
-    lefts = np.zeros(len(mass), dtype=int)
-    rights = np.zeros(len(mass), dtype=int) + neep - 1  # the last index
+    lefts = np.zeros(len(logage), dtype=int)
+    rights = np.zeros(len(logage), dtype=int) + neep - 1  # the last index
     leftX = lefts[curgood]
     rightX = rights[curgood]
 
@@ -267,9 +276,9 @@ def _binary_search(mass, bads, logage, neep, FF):
     # A we either in the situation of boundaries having
     # 2 finite values or
     # B one finite on the left and the other one nan
+    leftY, rightY = [FF(_, curgood) for _ in [leftX, rightX]]
 
     while True:
-        leftY, rightY = [FF(_, curgood) for _ in [leftX, rightX]]
         targY = logage[curgood]
 
         propX = (leftX + rightX) // 2
@@ -282,6 +291,7 @@ def _binary_search(mass, bads, logage, neep, FF):
         leftX[x1] = propX[x1]
         rightX[x2] = propX[x2]
         rightX[x3] = propX[x3]
+        leftY, rightY = [FF(_, curgood) for _ in [leftX, rightX]]
         # we stop for either right-left==1 or for bads
         curbad = (targY < leftY) | (targY >= rightY)  # we'll exclude them
         curbad2 = (rightX == leftX + 1) & np.isnan(rightY)  # this is option B
@@ -294,6 +304,7 @@ def _binary_search(mass, bads, logage, neep, FF):
         curgood = curgood[~exclude]
         leftX = leftX[~exclude]
         rightX = rightX[~exclude]
+
     bads = bads | (rights >= neep)
     lefts[bads] = 0
     rights[bads] = 1
@@ -547,12 +558,13 @@ The interpolation is done in two stages:
                     C22[subset] *
                     self.logage_grid[l2feh[subset], l2mass[subset], curi])
 
-        lefts, rights, bads = _binary_search(mass, bads, logage, self.neep, FF)
+        lefts, rights, bads = _binary_search(bads, logage, self.neep, FF)
         LV = np.zeros(len(mass))
         RV = LV + 1
         LV[~bads] = FF(lefts[~bads], ~bads)
         RV[~bads] = FF(rights[~bads], ~bads)
         eep_frac = (logage - LV) / (RV - LV)
+        # 1 / 0
         # eep_frac is the coefficient for interpolation in EEP axis
         # 0<=eep_frac<1
         # eep1 is the position in the EEP axis (essentially floor(EEP))

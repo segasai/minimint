@@ -326,6 +326,19 @@ def _get_polylin_coeff(feh, ufeh, mass, umass, feh_ind1, feh_ind2, mass_ind1,
     return C11, C12, C21, C22
 
 
+def _interpolator(C11, C12, C21, C22, grid, ifeh1, ifeh2, imass1, imass2,
+                  ieep):
+    """
+    Perform a bilinear interpolation given coefficients C11,...C22
+    indices along feh dimension ifeh1, ifeh2 (referring to sequential indices)
+    of the grid box in question
+    indices along mass
+    and index along eep axis
+    """
+    return (C11 * grid[ifeh1, imass1, ieep] + C12 * grid[ifeh1, imass2, ieep] +
+            C21 * grid[ifeh2, imass1, ieep] + C22 * grid[ifeh2, imass2, ieep])
+
+
 class TheoryInterpolator:
 
     def __init__(self, prefix=None):
@@ -386,10 +399,9 @@ class TheoryInterpolator:
             curr = []
             for j, cureep in enumerate([eep1_good, eep2_good]):
                 curr.append(
-                    (C11_good * curarr[l1feh_good, l1mass_good, cureep] +
-                     C12_good * curarr[l1feh_good, l2mass_good, cureep] +
-                     C21_good * curarr[l2feh_good, l1mass_good, cureep] +
-                     C22_good * curarr[l2feh_good, l2mass_good, cureep]))
+                    _interpolator(C11_good, C12_good, C21_good, C22_good,
+                                  curarr, l1feh_good, l2feh_good, l1mass_good,
+                                  l2mass_good, cureep))
             xret[curkey] = curr[0] + eep_frac_good * (curr[1] - curr[0])
             # perfoming the linear interpolation with age
 

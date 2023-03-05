@@ -326,7 +326,7 @@ def _get_polylin_coeff(feh, ufeh, mass, umass, feh_ind1, feh_ind2, mass_ind1,
     return C11, C12, C21, C22
 
 
-def _interpolator(C11, C12, C21, C22, grid, ifeh1, ifeh2, imass1, imass2,
+def _interpolator(grid, C11, C12, C21, C22, ifeh1, ifeh2, imass1, imass2,
                   ieep):
     """
     Perform a bilinear interpolation given coefficients C11,...C22
@@ -399,9 +399,9 @@ class TheoryInterpolator:
             curr = []
             for j, cureep in enumerate([eep1_good, eep2_good]):
                 curr.append(
-                    _interpolator(C11_good, C12_good, C21_good, C22_good,
-                                  curarr, l1feh_good, l2feh_good, l1mass_good,
-                                  l2mass_good, cureep))
+                    _interpolator(curarr, C11_good, C12_good, C21_good,
+                                  C22_good, l1feh_good, l2feh_good,
+                                  l1mass_good, l2mass_good, cureep))
             xret[curkey] = curr[0] + eep_frac_good * (curr[1] - curr[0])
             # perfoming the linear interpolation with age
 
@@ -445,12 +445,11 @@ class TheoryInterpolator:
 
         xind = ~bad
 
-        def FF(curi):
-            return (
-                C11[xind] * self.logage_grid[l1feh[xind], l1mass[xind], curi] +
-                C12[xind] * self.logage_grid[l1feh[xind], l2mass[xind], curi] +
-                C21[xind] * self.logage_grid[l2feh[xind], l1mass[xind], curi] +
-                C22[xind] * self.logage_grid[l2feh[xind], l2mass[xind], curi])
+        def FF(cureep):
+            return _interpolator(self.logage_grid, C11[xind], C12[xind],
+                                 C21[xind], C22[xind], l1feh[xind],
+                                 l2feh[xind], l1mass[xind], l2mass[xind],
+                                 cureep)
 
         retage = mass * 0
         Fe1 = FF(eep1)
@@ -560,15 +559,11 @@ The interpolation is done in two stages:
                                                 self.umass, l1feh, l2feh,
                                                 l1mass, l2mass)
 
-        def FF(curi, subset):
-            return (C11[subset] *
-                    self.logage_grid[l1feh[subset], l1mass[subset], curi] +
-                    C12[subset] *
-                    self.logage_grid[l1feh[subset], l2mass[subset], curi] +
-                    C21[subset] *
-                    self.logage_grid[l2feh[subset], l1mass[subset], curi] +
-                    C22[subset] *
-                    self.logage_grid[l2feh[subset], l2mass[subset], curi])
+        def FF(cureep, subset):
+            return _interpolator(self.logage_grid, C11[subset], C12[subset],
+                                 C21[subset], C22[subset], l1feh[subset],
+                                 l2feh[subset], l1mass[subset], l2mass[subset],
+                                 cureep)
 
         lefts, rights, bads = _binary_search(bads, logage, self.neep, FF)
         LV = np.zeros(len(mass))
@@ -576,7 +571,6 @@ The interpolation is done in two stages:
         LV[~bads] = FF(lefts[~bads], ~bads)
         RV[~bads] = FF(rights[~bads], ~bads)
         eep_frac = (logage - LV) / (RV - LV)
-        # 1 / 0
         # eep_frac is the coefficient for interpolation in EEP axis
         # 0<=eep_frac<1
         # eep1 is the position in the EEP axis (essentially floor(EEP))
@@ -622,11 +616,9 @@ The interpolation is done in two stages:
         # or grid[r] is not finite
         i1, i2 = 0, self.neep - 1
 
-        def getAge(i):
-            return (C11 * self.logage_grid[l1feh, l1mass, i] +
-                    C12 * self.logage_grid[l1feh, l2mass, i] +
-                    C21 * self.logage_grid[l2feh, l1mass, i] +
-                    C22 * self.logage_grid[l2feh, l2mass, i])
+        def getAge(cureep):
+            return _interpolator(self.logage_grid, C11, C12, C21, C22, l1feh,
+                                 l2feh, l1mass, l2mass, cureep)
 
         # check invariants on edges
         if not getAge(i1) <= logage:

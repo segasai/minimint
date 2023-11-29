@@ -15,7 +15,7 @@ rm -rf dist/* build/*
 TMPDIR=`mktemp -d`
 cp -r * $TMPDIR
 cd $TMPDIR/
-python setup.py sdist bdist_wheel
+python -m build --sdist --wheel
 twine check dist/*
 twine upload dist/*
 

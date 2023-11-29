@@ -25,8 +25,8 @@ def get_revision():
             ret = '+dev' + revision
         else:
             ret = ''
-    except:
-        ret= ''
+    except:  # noqa
+        ret = ''
     return ret
 
 
@@ -38,7 +38,7 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 
-VERSIONPIP=read('version.txt').rstrip()
+VERSIONPIP = read('version.txt').rstrip()
 VERSION = VERSIONPIP + get_revision()
 
 with open('py/minimint/_version.py', 'w') as fp:

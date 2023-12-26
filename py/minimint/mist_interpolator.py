@@ -164,7 +164,11 @@ def download_and_prepare(filters=[
         fdout.close()
         fd.close()
         cmd = 'cd %s; tar xfJ %s' % (pref, fname)
-        os.system(cmd)
+        if os.name == 'nt':
+            cmd = 'cd %s ; tar.exe xFJ %s' % (pref, fname)
+        status = os.system(cmd)
+        if status != 0:
+            raise RuntimeError('Failed to untar the files')
 
     with tempfile.TemporaryDirectory(dir=tmp_prefix) as T:
         for curfilt in filters:

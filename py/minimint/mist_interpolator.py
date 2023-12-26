@@ -233,9 +233,9 @@ def prepare(eep_prefix,
         if k == 'logage':
             grid[:, :, :] = np.cumsum(grid, axis=2)
 
-        np.save(outp_prefix + '/' + get_file(k), grid)
+        np.save(os.path.join(outp_prefix, get_file(k)), grid)
 
-    with open(outp_prefix + '/' + INTERP_PKL, 'wb') as fp:
+    with open(os.path.join(outp_prefix, INTERP_PKL), 'wb') as fp:
         pickle.dump(dict(umass=umass, ufeh=ufeh, neep=neep), fp)
     print('Reading/processing bolometric corrections')
     bolom.prepare(bolom_prefix, outp_prefix, filters)
@@ -353,13 +353,13 @@ class TheoryInterpolator:
         """
         if prefix is None:
             prefix = utils.get_data_path()
-        self.logg_grid = np.load(prefix + '/' + get_file('logg'))
-        self.logl_grid = np.load(prefix + '/' + get_file('logl'))
-        self.logteff_grid = np.load(prefix + '/' + get_file('logteff'))
-        self.logage_grid = np.load(prefix + '/' + get_file('logage'))
-        self.phase_grid = np.load(prefix + '/' + get_file('phase'))
+        (self.logg_grid, self.logl_grid, self.logteff_grid, self.logage_grid,
+         self.phase_grid) = [
+             np.load(os.path.join(prefix, get_file(curt)))
+             for curt in ['logg', 'logl', 'logteff', 'logage', 'phase']
+         ]
 
-        with open(prefix + '/' + INTERP_PKL, 'rb') as fp:
+        with open(os.path.join(prefix, INTERP_PKL), 'rb') as fp:
             D = pickle.load(fp)
             self.umass = np.array(D['umass'])
             self.ufeh = np.array(D['ufeh'])

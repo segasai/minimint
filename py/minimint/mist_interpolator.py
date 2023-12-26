@@ -3,10 +3,12 @@ import warnings
 import glob
 import os
 import gc
+import subprocess
 import pickle
 import urllib.request
 import astropy.table as atpy
 import scipy.interpolate
+
 import numpy as np
 from minimint import bolom, utils
 """
@@ -166,9 +168,11 @@ def download_and_prepare(filters=[
         cmd = 'cd %s; tar xfJ %s' % (pref, fname)
         if os.name == 'nt':
             cmd = 'cd %s ; tar.exe xFJ %s' % (pref, fname)
-        status = os.system(cmd)
-        if status != 0:
-            raise RuntimeError('Failed to untar the files')
+
+        ret = subprocess.run(cmd, capture_output=True, shell=True)
+        if ret.returncode != 0:
+            raise RuntimeError('Failed to untar the files' +
+                               ret.stdout.decode() + ret.stderr.decode())
 
     with tempfile.TemporaryDirectory(dir=tmp_prefix) as T:
         for curfilt in filters:

@@ -93,7 +93,7 @@ def read_grid(eep_prefix, outp_prefix):
             tabs.remove_column(k)
 
     os.makedirs(outp_prefix, exist_ok=True)
-    tabs.write(outp_prefix + '/' + TRACKS_FILE, overwrite=True)
+    tabs.write(os.path.join(outp_prefix, TRACKS_FILE), overwrite=True)
 
 
 def grid3d_filler(ima):
@@ -159,7 +159,7 @@ def download_and_prepare(filters=[
         print('Downloading', url)
         fd = urllib.request.urlopen(url)
         fname = url.split('/')[-1]
-        fdout = open(pref + '/' + fname, 'wb')
+        fdout = open(os.path.join(pref, fname), 'wb')
         fdout.write(fd.read())
         fdout.close()
         fd.close()
@@ -198,8 +198,8 @@ def prepare(eep_prefix,
             and bolometric corrections')
     read_grid(eep_prefix, outp_prefix)
     print('Processing EEPs')
-    tab = atpy.Table().read(outp_prefix + '/' + TRACKS_FILE)
-    os.unlink(outp_prefix + '/' + TRACKS_FILE)  # remove after reading
+    tab = atpy.Table().read(os.path.join(outp_prefix, TRACKS_FILE))
+    os.unlink(os.path.join(outp_prefix, TRACKS_FILE))  # remove after reading
 
     umass, mass_id = np.unique(np.array(tab['initial_mass']),
                                return_inverse=True)

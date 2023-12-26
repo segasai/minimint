@@ -6,7 +6,7 @@ on: push
 jobs:
   tester:
     name: Test the code
-    runs-on: [ubuntu-latest, windows-latest]
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: [3.8, '3.10']

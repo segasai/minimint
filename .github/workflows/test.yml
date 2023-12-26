@@ -28,12 +28,13 @@ jobs:
           pip install pytest-cov
           pip install coveralls
           pip install .
+      - name: Pylint
+        if: ${{ ( matrix.os != 'windows-latest' ) }}
+        run: pylint -E --disable=E1101 py/minimint/*py
       - name: Test
-        run: |
-          pytest --cov=minimint -s
-          pylint -E --disable=E1101 py/minimint/*py
+        run:  pytest --cov=minimint -s
       - name: Coveralls
-        if: ${{ success() }}
+        if: ${{ success() && (matrix.os != 'windows-latest') }}
         run: coveralls --service=github
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

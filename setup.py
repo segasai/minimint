@@ -41,7 +41,7 @@ def read(fname):
 VERSIONPIP = read('version.txt').rstrip()
 VERSION = VERSIONPIP + get_revision()
 
-with open(os.path.join(['py', 'minimint', '_version.py']), 'w') as fp:
+with open(os.path.join('py', 'minimint', '_version.py'), 'w') as fp:
     print('version="%s"' % (VERSION), file=fp)
 
 setup(

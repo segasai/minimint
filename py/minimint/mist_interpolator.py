@@ -161,13 +161,14 @@ def download_and_prepare(filters=[
         print('Downloading', url)
         fd = urllib.request.urlopen(url)
         fname = url.split('/')[-1]
-        fdout = open(os.path.join(pref, fname), 'wb')
+        fname_out = os.path.join(pref, fname)
+        fdout = open(fname_out, 'wb')
         fdout.write(fd.read())
         fdout.close()
         fd.close()
-        cmd = 'cd %s; tar xfJ %s' % (pref, fname)
+        cmd = f'cd {pref}; tar xfJ {fname_out}'
         if os.name == 'nt':
-            cmd = 'cd %s ; tar.exe xFJ %s' % (pref, fname)
+            cmd = f'cd {pref} && tar.exe xFJ {fname_out}'
 
         ret = subprocess.run(cmd, capture_output=True, shell=True)
         if ret.returncode != 0:

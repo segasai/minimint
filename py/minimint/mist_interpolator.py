@@ -168,7 +168,7 @@ def download_and_prepare(filters=[
         fd.close()
         cmd = f'cd {pref}; tar xfJ {fname_out}'
         if os.name == 'nt':
-            cmd = f'cd {pref} && tar.exe xFJ {fname_out}'
+            cmd = f'cd {pref} && tar.exe -xfJ {fname_out}'
 
         ret = subprocess.run(cmd, capture_output=True, shell=True)
         if ret.returncode != 0:

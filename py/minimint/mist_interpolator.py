@@ -174,7 +174,7 @@ def download_and_prepare(filters=[
         fname_out = os.path.basename(fname_out)
         if os.name == 'nt':
             fname_out1 = fname_out.replace('.txz', '.tar')
-            cmd = (f'cd {pref} && '
+            cmd = (f'cd /d {pref} && '
                    f'7z -bb3 x {fname_out} && '
                    f'7z -bb3 x {fname_out1}')
         else:

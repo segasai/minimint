@@ -167,8 +167,8 @@ def download_and_prepare(filters=[
         fdout.close()
         fd.close()
         if os.name == 'nt':
-            fname_out1 = fname_out.replace('.xz', '')
-            cmd = f'cd {pref} && 7z x {fname_out} && tar -xf {fname_out1}'
+            fname_out1 = fname_out.replace('.txz', '.tar')
+            cmd = f'cd {pref} && 7z x {fname_out} -so > {fname_out1} && tar -xf {fname_out1}'
         else:
             cmd = f'cd {pref}; tar xfJ {fname_out}'
             

@@ -3,10 +3,12 @@ import warnings
 import glob
 import os
 import gc
+import subprocess
 import pickle
 import urllib.request
 import astropy.table as atpy
 import scipy.interpolate
+
 import numpy as np
 from minimint import bolom, utils
 """
@@ -61,8 +63,10 @@ def getheader(f):
 
 
 def read_grid(eep_prefix, outp_prefix):
-    fs = glob.glob('%s/*EEPS/*eep' % (eep_prefix, ))
-    assert (len(fs) > 0)
+    mask = os.path.join(eep_prefix, '*EEPS', '*eep')
+    fs = glob.glob(mask)
+    if len(fs) == 0:
+        raise RuntimeError(f'Failed to find eep files {mask}')
     tmpfile = utils.tail_head(fs[0], 11, 10)
     tab0 = atpy.Table().read(tmpfile, format='ascii.fast_commented_header')
     os.unlink(tmpfile)
@@ -71,7 +75,7 @@ def read_grid(eep_prefix, outp_prefix):
     for i, f in enumerate(fs):
         if i % (N // 100) == 0:
             print('%d/%d' % (i, N))
-        curt = atpy.Table().read(f, format='ascii')
+        curt = atpy.Table().read(f, format='ascii.fast_no_header')
         for i, k in enumerate(list(curt.columns)):
             curt.rename_column(k, list(tab0.columns)[i])
         D = getheader(f)
@@ -93,7 +97,7 @@ def read_grid(eep_prefix, outp_prefix):
             tabs.remove_column(k)
 
     os.makedirs(outp_prefix, exist_ok=True)
-    tabs.write(outp_prefix + '/' + TRACKS_FILE, overwrite=True)
+    tabs.write(os.path.join(outp_prefix, TRACKS_FILE), overwrite=True)
 
 
 def grid3d_filler(ima):
@@ -159,12 +163,22 @@ def download_and_prepare(filters=[
         print('Downloading', url)
         fd = urllib.request.urlopen(url)
         fname = url.split('/')[-1]
-        fdout = open(pref + '/' + fname, 'wb')
+        fname_out = os.path.join(pref, fname)
+        fdout = open(fname_out, 'wb')
         fdout.write(fd.read())
         fdout.close()
         fd.close()
-        cmd = 'cd %s; tar xfJ %s' % (pref, fname)
-        os.system(cmd)
+        if os.name == 'nt':
+            fname_out1 = fname_out.replace('.txz', '.tar')
+            cmd = (f'cd /d {pref} && '
+                   f'7z x {fname_out} && '
+                   f'7z x {fname_out1}')
+        else:
+            cmd = f'cd {pref}; tar xfJ {fname_out}'
+        ret = subprocess.run(cmd, shell=True, timeout=60)
+        if ret.returncode != 0:
+            raise RuntimeError('Failed to untar the files' +
+                               ret.stdout.decode() + ret.stderr.decode())
 
     with tempfile.TemporaryDirectory(dir=tmp_prefix) as T:
         for curfilt in filters:
@@ -198,8 +212,8 @@ def prepare(eep_prefix,
             and bolometric corrections')
     read_grid(eep_prefix, outp_prefix)
     print('Processing EEPs')
-    tab = atpy.Table().read(outp_prefix + '/' + TRACKS_FILE)
-    os.unlink(outp_prefix + '/' + TRACKS_FILE)  # remove after reading
+    tab = atpy.Table().read(os.path.join(outp_prefix, TRACKS_FILE))
+    os.unlink(os.path.join(outp_prefix, TRACKS_FILE))  # remove after reading
 
     umass, mass_id = np.unique(np.array(tab['initial_mass']),
                                return_inverse=True)
@@ -233,9 +247,9 @@ def prepare(eep_prefix,
         if k == 'logage':
             grid[:, :, :] = np.cumsum(grid, axis=2)
 
-        np.save(outp_prefix + '/' + get_file(k), grid)
+        np.save(os.path.join(outp_prefix, get_file(k)), grid)
 
-    with open(outp_prefix + '/' + INTERP_PKL, 'wb') as fp:
+    with open(os.path.join(outp_prefix, INTERP_PKL), 'wb') as fp:
         pickle.dump(dict(umass=umass, ufeh=ufeh, neep=neep), fp)
     print('Reading/processing bolometric corrections')
     bolom.prepare(bolom_prefix, outp_prefix, filters)
@@ -353,13 +367,13 @@ class TheoryInterpolator:
         """
         if prefix is None:
             prefix = utils.get_data_path()
-        self.logg_grid = np.load(prefix + '/' + get_file('logg'))
-        self.logl_grid = np.load(prefix + '/' + get_file('logl'))
-        self.logteff_grid = np.load(prefix + '/' + get_file('logteff'))
-        self.logage_grid = np.load(prefix + '/' + get_file('logage'))
-        self.phase_grid = np.load(prefix + '/' + get_file('phase'))
+        (self.logg_grid, self.logl_grid, self.logteff_grid, self.logage_grid,
+         self.phase_grid) = [
+             np.load(os.path.join(prefix, get_file(curt)))
+             for curt in ['logg', 'logl', 'logteff', 'logage', 'phase']
+         ]
 
-        with open(prefix + '/' + INTERP_PKL, 'rb') as fp:
+        with open(os.path.join(prefix, INTERP_PKL), 'rb') as fp:
             D = pickle.load(fp)
             self.umass = np.array(D['umass'])
             self.ufeh = np.array(D['ufeh'])

@@ -5,17 +5,17 @@ on: push
 
 jobs:
   tester:
-    name: Test the code
-    runs-on: [ubuntu-latest, macos-latest, windows-latest]
+    name: 'Test the code'
     strategy:
       matrix:
-        python-version: [3.8, '3.10']
-
+        python-version: ['3.8', '3.10']
+        os: ['ubuntu-latest', 'windows-latest']
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout 
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Python setup
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
           architecture: 'x64'
@@ -28,12 +28,13 @@ jobs:
           pip install pytest-cov
           pip install coveralls
           pip install .
+      - name: Pylint
+        if: ${{ ( matrix.os != 'windows-latest' ) }}
+        run: pylint -E --disable=E1101 py/minimint/*py
       - name: Test
-        run: |
-          pytest --cov=minimint -s
-          pylint -E --disable=E1101 py/minimint/*py
+        run:  pytest --cov=minimint -s
       - name: Coveralls
-        if: ${{ success() }}
+        if: ${{ success() && (matrix.os != 'windows-latest') }}
         run: coveralls --service=github
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

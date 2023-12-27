@@ -41,7 +41,7 @@ def read(fname):
 VERSIONPIP = read('version.txt').rstrip()
 VERSION = VERSIONPIP + get_revision()
 
-with open('py/minimint/_version.py', 'w') as fp:
+with open(os.path.join('py', 'minimint', '_version.py'), 'w') as fp:
     print('version="%s"' % (VERSION), file=fp)
 
 setup(
@@ -55,8 +55,8 @@ setup(
     url="http://github.com/segasai/minimint",
     packages=['minimint'],
     scripts=[fname for fname in glob.glob(os.path.join('bin', '*'))],
-    package_dir={'': 'py/'},
-    package_data={'minimint': ['tests/']},
+    package_dir={'': 'py'},
+    package_data={'minimint': ['tests']},
     long_description=read('README.md'),
     long_description_content_type='text/markdown',
     classifiers=[

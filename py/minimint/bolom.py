@@ -84,8 +84,8 @@ class BCInterpolator:
         bad = np.zeros(p.shape[0], dtype=bool)
         for i in range(self.ndim):
             pos1[:, i] = np.searchsorted(self.uvecs[i], p[:, i], 'right') - 1
-            bad = bad | (pos1[:, i] < 0) | (pos1[:, i] >=
-                                            (len(self.uvecs[i]) - 1))
+            bad = bad | (pos1[:, i] < 0) | (pos1[:, i]
+                                            >= (len(self.uvecs[i]) - 1))
             pos1[:, i][bad] = 0
             xs[:, i] = (p[:, i] - self.uvecs[i][pos1[:, i]]) / (
                 self.uvecs[i][pos1[:, i] + 1] - self.uvecs[i][pos1[:, i]]
@@ -119,10 +119,12 @@ def list_filters(path=None):
     if path is None:
         path = get_data_path()
 
-    fs = glob.glob(path + '/' + FILT_NPY % '*')
+    fs = glob.glob(os.path.join(path, FILT_NPY % '*'))
     filts = []
     for f in fs:
-        filts.append(re.match(FILT_NPY % '(.*)', f.split('/')[-1]).group(1))
+        filts.append(
+            re.match(FILT_NPY % '(.*)',
+                     f.split(os.path.sep)[-1]).group(1))
     return filts
 
 
@@ -140,7 +142,7 @@ def prepare(iprefix,
             raise Exception("shouldn't happen")
         last_vec = vec.copy()
         if i == 0:
-            np.save(oprefix + '/' + POINTS_NPY, vec)
+            np.save(os.path.join(oprefix, POINTS_NPY), vec)
         for k in tabs.columns:
             if k not in cols_ex:
-                np.save(oprefix + '/' + FILT_NPY % (k), tabs[k])
+                np.save(os.path.join(oprefix, FILT_NPY % k), tabs[k])

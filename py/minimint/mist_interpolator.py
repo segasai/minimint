@@ -181,6 +181,10 @@ def download_and_prepare(filters=[
         else:
             cmd = f'cd {pref}; tar xfJ {fname_out}'
         ret = subprocess.run(cmd, capture_output=True, shell=True, timeout=60)
+        fname_out2 = fname_out1.replace('.tar', '')
+        aa = glob.glob(os.path.join(pref, fname_out2, '*'))
+        print((aa))
+        assert len(aa) > 0
         print(cmd, fname_out, fname_out1,
               ret.stdout.decode() + ret.stderr.decode())
         # ret = subprocess.run(cmd, shell=True, timeout=60)

@@ -75,7 +75,7 @@ def read_grid(eep_prefix, outp_prefix):
     for i, f in enumerate(fs):
         if i % (N // 100) == 0:
             print('%d/%d' % (i, N))
-        curt = atpy.Table().read(f, format='ascii')
+        curt = atpy.Table().read(f, format='ascii.fast_no_header')
         for i, k in enumerate(list(curt.columns)):
             curt.rename_column(k, list(tab0.columns)[i])
         D = getheader(f)
@@ -175,7 +175,6 @@ def download_and_prepare(filters=[
                    f'7z x {fname_out1}')
         else:
             cmd = f'cd {pref}; tar xfJ {fname_out}'
-        #ret = subprocess.run(cmd, capture_output=True, shell=True, timeout=60)
         ret = subprocess.run(cmd, shell=True, timeout=60)
         if ret.returncode != 0:
             raise RuntimeError('Failed to untar the files' +

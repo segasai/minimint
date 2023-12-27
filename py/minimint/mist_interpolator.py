@@ -176,8 +176,6 @@ def download_and_prepare(filters=[
         else:
             cmd = f'cd {pref}; tar xfJ {fname_out}'
         ret = subprocess.run(cmd, capture_output=True, shell=True, timeout=60)
-        print(cmd, fname_out, fname_out1,
-              ret.stdout.decode() + ret.stderr.decode())
         if ret.returncode != 0:
             raise RuntimeError('Failed to untar the files' +
                                ret.stdout.decode() + ret.stderr.decode())

@@ -173,9 +173,11 @@ def download_and_prepare(filters=[
         fd.close()
         if os.name == 'nt':
             fname_out1 = fname_out.replace('.txz', '.tar')
-            cmd = (f'cd {pref} && '
-                   f'7z x {fname_out} -so > {fname_out1} && '
-                   f'tar -xf {fname_out1}')
+            cmd = (
+                f'cd {pref} && '
+                f'7z x {fname_out} -so > {fname_out1} && '
+                # f'tar -xvf {fname_out1}'
+                f'7z x {fname_out1}')
         else:
             cmd = f'cd {pref}; tar xfJ {fname_out}'
         ret = subprocess.run(cmd, capture_output=True, shell=True, timeout=60)

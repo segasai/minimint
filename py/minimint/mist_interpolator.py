@@ -66,10 +66,7 @@ def read_grid(eep_prefix, outp_prefix):
     mask = os.path.join(eep_prefix, '*EEPS', '*eep')
     fs = glob.glob(mask)
     if len(fs) == 0:
-        raise RuntimeError(f'Failed to find eep files {mask}' +
-                           str(glob.glob(os.path.join(eep_prefix, '*'))) +
-                           '\r\n' +
-                           str(glob.glob(os.path.join(eep_prefix, '*', '*'))))
+        raise RuntimeError(f'Failed to find eep files {mask}')
     tmpfile = utils.tail_head(fs[0], 11, 10)
     tab0 = atpy.Table().read(tmpfile, format='ascii.fast_commented_header')
     os.unlink(tmpfile)
@@ -174,14 +171,13 @@ def download_and_prepare(filters=[
         if os.name == 'nt':
             fname_out1 = fname_out.replace('.txz', '.tar')
             cmd = (f'cd /d {pref} && '
-                   f'7z -bb3 x {fname_out} && '
-                   f'7z -bb3 x {fname_out1}')
+                   f'7z x {fname_out} && '
+                   f'7z x {fname_out1}')
         else:
             cmd = f'cd {pref}; tar xfJ {fname_out}'
         ret = subprocess.run(cmd, capture_output=True, shell=True, timeout=60)
         print(cmd, fname_out, fname_out1,
               ret.stdout.decode() + ret.stderr.decode())
-        # ret = subprocess.run(cmd, shell=True, timeout=60)
         if ret.returncode != 0:
             raise RuntimeError('Failed to untar the files' +
                                ret.stdout.decode() + ret.stderr.decode())

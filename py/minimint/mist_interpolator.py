@@ -166,12 +166,14 @@ def download_and_prepare(filters=[
         fdout.write(fd.read())
         fdout.close()
         fd.close()
-        cmd = f'cd {pref}; tar xfJ {fname_out}'
         if os.name == 'nt':
             fname_out1 = fname_out.replace('.xz', '')
-            cmd = f'cd {pref} && 7z x {fname_out}  &&  tar -xf {fname_out1}'
-
-        ret = subprocess.run(cmd, capture_output=True, shell=True, timeout=60)
+            cmd = f'cd {pref} && 7z x {fname_out} && tar -xf {fname_out1}'
+        else:
+            cmd = f'cd {pref}; tar xfJ {fname_out}'
+            
+        #ret = subprocess.run(cmd, capture_output=True, shell=True, timeout=60)
+        ret = subprocess.run(cmd, shell=True, timeout=60)
         if ret.returncode != 0:
             raise RuntimeError('Failed to untar the files' +
                                ret.stdout.decode() + ret.stderr.decode())

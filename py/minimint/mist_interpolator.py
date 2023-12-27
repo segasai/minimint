@@ -171,10 +171,11 @@ def download_and_prepare(filters=[
         fdout.write(fd.read())
         fdout.close()
         fd.close()
+        fname_out = os.path.basename(fname_out)
         if os.name == 'nt':
             fname_out1 = fname_out.replace('.txz', '.tar')
             cmd = (f'cd {pref} && '
-                   f'7z x {fname_out} && '
+                   f'7z -bb3 x {fname_out} && '
                    f'7z -bb3 x {fname_out1}')
         else:
             cmd = f'cd {pref}; tar xfJ {fname_out}'

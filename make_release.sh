@@ -9,7 +9,7 @@ echo "$VERSION" > version.txt
 echo "committing"
 git commit -m "New version $VERSION" -v version.txt
 echo "tagging"
-git tag $VERSION
+git tag v${VERSION}
 echo "preparing the pypi package"
 rm -rf dist/* build/*
 TMPDIR=`mktemp -d`

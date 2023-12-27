@@ -173,20 +173,18 @@ def download_and_prepare(filters=[
         fd.close()
         if os.name == 'nt':
             fname_out1 = fname_out.replace('.txz', '.tar')
-            cmd = (
-                f'cd {pref} && '
-                f'7z x {fname_out} -so > {fname_out1} && '
-                # f'tar -xvf {fname_out1}'
-                f'7z -bb3 x {fname_out1}')
+            cmd = (f'cd {pref} && '
+                   f'7z x {fname_out} && '
+                   f'7z -bb3 x {fname_out1}')
         else:
             cmd = f'cd {pref}; tar xfJ {fname_out}'
         ret = subprocess.run(cmd, capture_output=True, shell=True, timeout=60)
         fname_out2 = fname_out1.replace('.tar', '')
         aa = glob.glob(os.path.join(pref, fname_out2, '*'))
-        print((aa))
-        assert len(aa) > 0
         print(cmd, fname_out, fname_out1,
               ret.stdout.decode() + ret.stderr.decode())
+        print((aa))
+        assert len(aa) > 0
         # ret = subprocess.run(cmd, shell=True, timeout=60)
         if ret.returncode != 0:
             raise RuntimeError('Failed to untar the files' +

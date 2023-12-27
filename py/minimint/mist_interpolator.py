@@ -67,8 +67,9 @@ def read_grid(eep_prefix, outp_prefix):
     fs = glob.glob(mask)
     if len(fs) == 0:
         raise RuntimeError(f'Failed to find eep files {mask}' +
-                           str(os.path.join(eep_prefix, '*')) + '\n' +
-                           str(os.path.join(eep_prefix, '*', '*')))
+                           str(glob.glob(os.path.join(eep_prefix, '*'))) +
+                           '\r\n' +
+                           str(glob.glob(os.path.join(eep_prefix, '*', '*'))))
     tmpfile = utils.tail_head(fs[0], 11, 10)
     tab0 = atpy.Table().read(tmpfile, format='ascii.fast_commented_header')
     os.unlink(tmpfile)

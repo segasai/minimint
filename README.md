@@ -6,7 +6,7 @@ Minimint (MIni Mist INTerpolation)
 
 Software to do simple interpolation of MIST isochrones.
 
-Author: Sergey Koposov (2020-2021) skoposov __AT__ ed __DOT__ ac __DOT__ uk
+Author: Sergey Koposov (2020-2024) skoposov __AT__ ed __DOT__ ac __DOT__ uk
 
 # Instructions 
 

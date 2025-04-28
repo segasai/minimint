@@ -4,7 +4,7 @@
 
 # Minimint (MIni Mist INTerpolation)
 
-This is a python package to perform interpolation of MIST isochrones. It is simiple, in the sense that it only does one thing - predict the stellar parameters ($\log g$, $T_{eff}$, $\log L$) and photometry in a given filter for a given mass, age and metallicity.
+This is a python package to perform interpolation of MIST isochrones. It is simple, in the sense that it only does one thing - predict the stellar parameters ($\log g$, $T_{eff}$, $\log L$) and photometry in a given filter for a given mass, age and metallicity. It is also vectorized, so computing photometry for large number of stars, should not be slow.
 
 Author: Sergey Koposov (2020-2025) skoposov __AT__ ed __DOT__ ac __DOT__ uk
 
@@ -21,7 +21,7 @@ pip install minimint
 minimint.download_and_prepare()
 ```
 
-That will download everything and process the evolutionary tracks and bolometric corrections by creating the necessary files for the package.
+That will download all the MIST files, and process the evolutionary tracks and bolometric corrections by creating the necessary files for the package.
 
 `minimint.download_and_prepare()` by default creates bolometric corrections for these filters
 'DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper','UBVRIplus', 'WISE'
@@ -29,9 +29,9 @@ If you need additional filters, you can specify them using the filters parameter
 
 ``` minimint.download_and_prepare(filters=['JWST','WISE','DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper','UBVRIplus'])```
 Check which filters are available on the MIST website http://waps.cfa.harvard.edu/MIST/model_grids.html
-This will take some time (20-30 min) and will use significant disk space (10-30 Gb).
+The downloading will take some time (20-30 min) and will use significant amount of disk space (10-30 Gb).
 
-If you want to put those processed isochrone files in a location different from the site-packages folder of minimint, you can use the outp_prefix parameter of `download_and_prepare`. You then will need to either specify the location each time when you construct the interpolators or with the MINIMINT_DATA_PATH environment variable
+If you want to put those processed isochrone files in a location different from the site-packages folder of minimint, you can use the outp_prefix parameter of `download_and_prepare`. You then will need to either specify the location each time when you construct the interpolators or with the MINIMINT_DATA_PATH environment variable.
 
 ## Usage 
 
@@ -44,6 +44,7 @@ The interpolator is a callable, so you can call it on mass, log10(age), feh
 ``` ii(mass, logage, feh)``` 
  
 This returns a dictionary with photometry, logg, logteff and logl.
+mass, logage and feh could arrays. In this case the result will be dictionary of arrays.
 
 You also can use the interpolator to find the maximum valid mass on the isochrone.
 
@@ -55,10 +56,10 @@ See the [notebook](examples/Example.ipynb) in the examples folder
 
 ## Synthetic stellar populations
 If you are interested in synthetic stellar populations you will need
-the implementation of the IMF. For this you may want to use https://github.com/keflavich/imf
+an implementation of the IMF. For this you may want to use https://github.com/keflavich/imf
 
 ## Acknowledgement
 
 If you are using this package please cite it through zenodo link
 https://doi.org/10.5281/zenodo.4002971
-Also make sure you acknowledge MIST isochrones https://waps.cfa.harvard.edu/MIST/
+Also make sure that you acknowledge MIST isochrones https://waps.cfa.harvard.edu/MIST/

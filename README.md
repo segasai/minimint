@@ -4,9 +4,9 @@
 
 # Minimint (MIni Mist INTerpolation)
 
-# Python package to perform simple interpolation of MIST isochrones.
+This is a python package to perform interpolation of MIST isochrones. It is simiple, in the sense that it only does one thing - predict the stellar parameters ($\log g$, $T_{eff}$, $\log L$) and photometry in a given filter for a given mass, age and metallicity.
 
-Author: Sergey Koposov (2020-2024) skoposov __AT__ ed __DOT__ ac __DOT__ uk
+Author: Sergey Koposov (2020-2025) skoposov __AT__ ed __DOT__ ac __DOT__ uk
 
 ## Instructions 
 

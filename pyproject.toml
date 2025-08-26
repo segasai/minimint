@@ -15,7 +15,12 @@ classifiers = [
     "Topic :: Utilities",
     "License :: OSI Approved :: BSD License",
 ]
-requires-python = ">=3.6"
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+    "scipy",
+    "astropy",
+]
 
 [project.urls]
 Homepage = "http://github.com/segasai/minimint"

@@ -1,8 +1,4 @@
-try:
-    from importlib.metadata import version
-except ImportError:
-    # Python < 3.8
-    from importlib_metadata import version
+from importlib.metadata import version
 
 try:
     __version__ = version("minimint")

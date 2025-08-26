@@ -8,12 +8,14 @@ jobs:
     name: 'Test the code'
     strategy:
       matrix:
-        python-version: ['3.8', '3.10']
+        python-version: ['3.8', '3.10', '3.12']
         os: ['ubuntu-latest', 'windows-latest']
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout 
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       - name: Python setup
         uses: actions/setup-python@v4
         with:
@@ -22,7 +24,6 @@ jobs:
       - name: Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
           pip install pytest
           pip install pylint
           pip install pytest-cov

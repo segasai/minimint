@@ -133,9 +133,9 @@ def __bc_url(x):
     return 'https://waps.cfa.harvard.edu/MIST/BC_tables/%s.txz' % x
 
 
-def __eep_url(x):
+def __eep_url(x, vvcrit=0.4):
     return ('https://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/' +
-            'MIST_v1.2_feh_%s_afe_p0.0_vvcrit0.4_EEPS.txz') % x
+            'MIST_v1.2_feh_%s_afe_p0.0_vvcrit%.1f_EEPS.txz') % (x, vvcrit)
 
 
 def download_and_prepare(filters=[
@@ -143,7 +143,8 @@ def download_and_prepare(filters=[
     'WISE'
 ],
                          outp_prefix=None,
-                         tmp_prefix=None):
+                         tmp_prefix=None,
+                         vvcrit=0.4):
     """ Download the MIST isochrones and prepare the prerocessed isochrones
     Parameters
 
@@ -154,10 +155,15 @@ def download_and_prepare(filters=[
         Output directory for processed files
     tmp_prefix: string (optional)
         Temporary directory for storing downloaded files
+    vvcrit: float
+        The value of V/Vcrit for the isochrones. The default value is 0.4, but
+        you can also use the value of 0
     """
 
     mets = ('m4.00,m3.50,m3.00,m2.50,m2.00,m1.75,m1.50,m1.25,' +
             'm1.00,m0.75,m0.50,m0.25,p0.00,p0.25,p0.50').split(',')
+    if not np.isclose([0., 0.4], vvcrit).any():
+        raise ValueError('Only 0 and 0.4 values are allowed')
 
     def writer(url, pref):
         print('Downloading', url)
@@ -184,7 +190,7 @@ def download_and_prepare(filters=[
         for curfilt in filters:
             writer(__bc_url(curfilt), T)
         for curmet in mets:
-            writer(__eep_url(curmet), T)
+            writer(__eep_url(curmet, vvcrit=vvcrit), T)
         prepare(T, T, outp_prefix=outp_prefix, filters=filters)
 
 
@@ -471,7 +477,8 @@ class TheoryInterpolator:
         logage1 = getAge(eep1)
         logage2 = getAge(eep2)
         # these are boundaries in the age grid
-        ret_logage[goodsel] = logage1 * (1 - eep_frac) + (eep_frac) * logage2
+        ret_logage[goodsel] = logage1 * (1 - eep_frac[goodsel]) + (
+            eep_frac[goodsel]) * logage2
         if returnJac:
             jac = mass * 0
             jac[goodsel] = logage2 - logage1

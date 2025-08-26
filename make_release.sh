@@ -5,9 +5,6 @@ if  [ `git status --porcelain=v1 | grep -v '^??'|wc -l ` -eq 0 ] ; then echo 'Go
     echo "Uncommitted changes found";
     exit 1;
 } ; fi 
-echo "$VERSION" > version.txt
-echo "committing"
-git commit -m "New version $VERSION" -v version.txt
 echo "tagging"
 git tag $VERSION
 echo "preparing the pypi package"

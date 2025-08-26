@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0", "setuptools-scm", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "minimint"
+dynamic = ["version"]
+authors = [{name = "Sergey Koposov", email = "skoposov@ed.ac.uk"}]
+description = "MIST Isochrone interpolation"
+readme = "README.md"
+license = {text = "BSD"}
+keywords = ["isochrone", "interpolation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Topic :: Utilities",
+    "License :: OSI Approved :: BSD License",
+]
+requires-python = ">=3.6"
+
+[project.urls]
+Homepage = "http://github.com/segasai/minimint"
+Repository = "http://github.com/segasai/minimint"
+
+[tool.setuptools]
+package-dir = {"" = "py"}
+
+[tool.setuptools.packages.find]
+where = ["py"]
+
+[tool.setuptools.package-data]
+minimint = ["tests"]
+
+[tool.setuptools_scm]

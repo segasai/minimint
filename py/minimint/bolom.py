@@ -4,10 +4,36 @@ import re
 import os
 import astropy.table as atpy
 import numpy as np
-from .utils import get_data_path, tail_head
+from .utils import get_data_path, tail_head, _get_cubic_coeffs
 
 POINTS_NPY = 'bolom_points.npy'
 FILT_NPY = 'filt_%s.npy'
+
+
+def _interpolator_4cubic(grid, ws, idxs):
+    """
+    Perform 4D cubic interpolation for bolometric corrections.
+    The dimensions are usually logTeff, logg, [Fe/H], and Av.
+    
+    grid: 4D array of grid values
+    ws: list of 4 weight arrays, each of shape (N, 4)
+    idxs: list of 4 index arrays, each of shape (N, 4)
+    """
+    res = np.zeros(ws[0].shape[0])
+    for i in range(4):
+        w_i = ws[0][:, i]
+        idx_i = idxs[0][:, i]
+        for j in range(4):
+            w_ij = w_i * ws[1][:, j]
+            idx_j = idxs[1][:, j]
+            for k in range(4):
+                w_ijk = w_ij * ws[2][:, k]
+                idx_k = idxs[2][:, k]
+                for l in range(4):
+                    w_ijkl = w_ijk * ws[3][:, l]
+                    idx_l = idxs[3][:, l]
+                    res += w_ijkl * grid[idx_i, idx_j, idx_k, idx_l]
+    return res
 
 
 def read_bolom(filt, iprefix):
@@ -74,38 +100,25 @@ class BCInterpolator:
         Return bolometric corrections given the stellar parameters
         The input is an array shaped Nx4
         where the 4 dimensions corresponds to
-        logteff, log ,feh, A_V
+        logteff, logg, feh, A_V
         and N for the number of stars
         """
         # assert arguments are shaped N,4
         res = {}
-        pos1 = np.zeros(p.shape, dtype=int)
-        xs = np.zeros(p.shape)
         bad = np.zeros(p.shape[0], dtype=bool)
+        ws = []
+        idxs = []
         for i in range(self.ndim):
-            pos1[:, i] = np.searchsorted(self.uvecs[i], p[:, i], 'right') - 1
-            bad = bad | (pos1[:, i] < 0) | (pos1[:, i]
-                                            >= (len(self.uvecs[i]) - 1))
-            pos1[:, i][bad] = 0
-            xs[:, i] = (p[:, i] - self.uvecs[i][pos1[:, i]]) / (
-                self.uvecs[i][pos1[:, i] + 1] - self.uvecs[i][pos1[:, i]]
-            )  # from 0 to 1
+            pos = np.searchsorted(self.uvecs[i], p[:, i], 'right') - 1
+            bad = bad | (pos < 0) | (pos >= (len(self.uvecs[i]) - 1))
+            # Clip pos for cubic neighbors
+            pos_clipped = np.clip(pos, 0, len(self.uvecs[i]) - 2)
+            w, idx = _get_cubic_coeffs(p[:, i], self.uvecs[i], pos_clipped)
+            ws.append(w)
+            idxs.append(idx)
 
-        curinds = []
-        curcoeffs = []
-        curinds = pos1[None, :, :] + self.box_list[:, None, :]
-        # this is fancy math for the poly linear interpolation
-        # where the value = sum F_j * x**a_j * (1-x)**(1-a_j)
-        # where F_j is the value in the cube vertex
-        # x is the n-dim vector where ieach axis goes from 0 to 1
-        # and a_j are the 0,1 vectors corresponding to the vertices
-        curcoeffs = (
-            xs[None, :, :]**self.box_list[:, None, :] *
-            (1 - xs[None, :, :])**(1 - self.box_list)[:, None, :]).prod(axis=2)
-        curinds1 = np.ravel_multi_index(curinds.T,
-                                        self.dats[list(self.filts)[0]].shape)
         for f in self.filts:
-            curres = (self.dats[f].flat[curinds1] * curcoeffs.T).sum(axis=1)
+            curres = _interpolator_4cubic(self.dats[f], ws, idxs)
             res[f] = curres
             res[f][bad] = np.nan
         return res

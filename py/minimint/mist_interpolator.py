@@ -581,15 +581,10 @@ The interpolation is done in two stages:
         wf, ifehs = utils._get_cubic_coeffs(feh, self.ufeh, l1feh)
         wm, imasses = utils._get_cubic_coeffs(mass, self.umass, l1mass)
 
-        C11, C12, C21, C22 = _get_polylin_coeff(feh, self.ufeh, mass,
-                                                self.umass, l1feh, l2feh,
-                                                l1mass, l2mass)
-
         def getAge(cureep, subset):
-            return _interpolator(self.logage_grid_unfilled, C11[subset],
-                                 C12[subset], C21[subset], C22[subset],
-                                 l1feh[subset], l2feh[subset], l1mass[subset],
-                                 l2mass[subset], cureep)
+            return utils._interpolator_bicubic(
+                self.logage_grid_unfilled, wf[subset], ifehs[subset],
+                wm[subset], imasses[subset], cureep)
 
         lefts, rights, bads = _binary_search(bads, logage, self.neep, getAge)
 

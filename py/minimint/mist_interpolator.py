@@ -466,8 +466,18 @@ class TheoryInterpolator:
         l1feh[bad] = 0
         eep1[bad] = 0
 
-        wf, ifehs = utils._get_cubic_coeffs(feh, self.ufeh, l1feh)
-        wm, imasses = utils._get_cubic_coeffs(mass, self.umass, l1mass)
+        feh_arr = np.atleast_1d(feh)
+        mass_arr = np.atleast_1d(mass)
+        l1feh_arr = np.atleast_1d(l1feh)
+        l1mass_arr = np.atleast_1d(l1mass)
+
+        wf, ifehs = utils._get_cubic_coeffs(feh_arr, self.ufeh, l1feh_arr)
+        wm, imasses = utils._get_cubic_coeffs(mass_arr, self.umass,
+                                              l1mass_arr)
+        wf = np.atleast_2d(wf)
+        ifehs = np.atleast_2d(ifehs)
+        wm = np.atleast_2d(wm)
+        imasses = np.atleast_2d(imasses)
         ueep = np.arange(neep)
         we, ieeps = utils._get_cubic_coeffs(eep, ueep, eep1)
 
@@ -547,11 +557,42 @@ class TheoryInterpolator:
                 im1, im2 = curm, im2
             if im2 - im1 == 1:
                 break
-        ret = self._getMaxMassBox(logage, feh, l1feh, l1feh + 1, im1, im2)
-        if not (np.isfinite(ret)):
-            return self.umass[im1]  # the edge
-        else:
-            return ret * (1 - 1e-10)
+        lo = self.umass[im1]
+        hi = self.umass[im2]
+
+        def _isfinite_mass(m):
+            return np.isfinite(self(m, logage, feh)['logl'][0])
+
+        # Ensure lo is valid and hi is invalid for the refinement.
+        if not _isfinite_mass(lo):
+            idx = im1
+            while idx > 0 and not _isfinite_mass(self.umass[idx]):
+                idx -= 1
+            lo = self.umass[idx]
+            hi = self.umass[min(idx + 1, len(self.umass) - 1)]
+        elif _isfinite_mass(hi):
+            idx = im2
+            while idx + 1 < len(self.umass) and _isfinite_mass(
+                    self.umass[idx + 1]):
+                idx += 1
+            if idx + 1 >= len(self.umass):
+                return self.umass[idx]
+            lo = self.umass[idx]
+            hi = self.umass[idx + 1]
+
+        # Refine the boundary so that lo is valid and hi is invalid.
+        # Use a strict tolerance so that lo is finite but lo+tol is not.
+        tol = 1e-7
+        for _ in range(40):
+            if hi - lo <= tol:
+                break
+            mid = 0.5 * (lo + hi)
+            if _isfinite_mass(mid):
+                lo = mid
+            else:
+                hi = mid
+
+        return lo
 
     def _get_eep_coeffs(self, mass, logage, feh):
         """
@@ -578,8 +619,14 @@ The interpolation is done in two stages:
         l1feh[bads] = 0
         l2feh[bads] = 1
 
-        wf, ifehs = utils._get_cubic_coeffs(feh, self.ufeh, l1feh)
-        wm, imasses = utils._get_cubic_coeffs(mass, self.umass, l1mass)
+        feh_arr = np.atleast_1d(feh)
+        mass_arr = np.atleast_1d(mass)
+        l1feh_arr = np.atleast_1d(l1feh)
+        l1mass_arr = np.atleast_1d(l1mass)
+
+        wf, ifehs = utils._get_cubic_coeffs(feh_arr, self.ufeh, l1feh_arr)
+        wm, imasses = utils._get_cubic_coeffs(mass_arr, self.umass,
+                                              l1mass_arr)
 
         def getAge(cureep, subset):
             return utils._interpolator_bicubic(
@@ -643,9 +690,14 @@ The interpolation is done in two stages:
                 or (l1mass < 0) or (l1feh < 0)):
             return False
 
-        C11, C12, C21, C22 = _get_polylin_coeff(feh, self.ufeh, mass,
-                                                self.umass, l1feh, l2feh,
-                                                l1mass, l2mass)
+        feh_arr = np.atleast_1d(feh)
+        mass_arr = np.atleast_1d(mass)
+        l1feh_arr = np.atleast_1d(l1feh)
+        l1mass_arr = np.atleast_1d(l1mass)
+
+        wf, ifehs = utils._get_cubic_coeffs(feh_arr, self.ufeh, l1feh_arr)
+        wm, imasses = utils._get_cubic_coeffs(mass_arr, self.umass,
+                                              l1mass_arr)
 
         # we want to find there is a point i in the age grid
         # where grid[i]<=logage<grid[i+1]
@@ -656,8 +708,8 @@ The interpolation is done in two stages:
         i1, i2 = 0, self.neep - 1
 
         def getAge(cureep):
-            return _interpolator(self.logage_grid_unfilled, C11, C12, C21, C22,
-                                 l1feh, l2feh, l1mass, l2mass, cureep)
+            return utils._interpolator_bicubic(self.logage_grid_unfilled, wf,
+                                               ifehs, wm, imasses, cureep)
 
         # check invariants on edges
         if not getAge(i1) <= logage:

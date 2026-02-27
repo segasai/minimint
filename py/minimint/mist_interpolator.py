@@ -1238,10 +1238,6 @@ The interpolation is done in two stages:
                     [np.atleast_1d(l1feh), np.atleast_1d(l1mass)])
 
                 i1, i2 = 0, self.neep - 1
-
-                def getAge(cureep):
-                    return _interpolator_polylin_nd(self.logage_grid_unfilled,
-                                                    coeff, inds, cureep)
             else:
                 afe = np.float64(afe)
                 if l1feh is None:
@@ -1267,27 +1263,27 @@ The interpolation is done in two stages:
 
                 i1, i2 = 0, self.neep - 1
 
-                def getAge(cureep):
-                    return _interpolator_polylin_nd(self.logage_grid_unfilled,
-                                                    coeff, inds, cureep)
+            def get_age_linear(cureep):
+                return _interpolator_polylin_nd(self.logage_grid_unfilled,
+                                                coeff, inds, cureep)
 
-            if not getAge(i1) <= logage:
+            if not get_age_linear(i1) <= logage:
                 return False
-            if (getAge(i2) <= logage):
+            if (get_age_linear(i2) <= logage):
                 return False
             stop = False
             while not stop:
                 ix = (i1 + i2) // 2
                 if i2 - i1 == 1:
                     stop = True
-                val = getAge(ix)
+                val = get_age_linear(ix)
                 if val <= logage:
                     i1 = ix
                 elif val > logage:
                     return True
                 else:
                     i2 = ix
-            if np.isnan(getAge(i2)):
+            if np.isnan(get_age_linear(i2)):
                 return False
             return True
 
@@ -1308,29 +1304,26 @@ The interpolation is done in two stages:
                 np.atleast_1d(mass), self.umass, np.atleast_1d(l1mass))
 
             i1, i2 = 0, self.neep - 1
+            get_age_cubic = lambda cureep: utils._interpolator_bicubic(
+                self.logage_grid_unfilled, wf, ifehs, wm, imasses, cureep)
 
-            def getAge(cureep):
-                return utils._interpolator_bicubic(self.logage_grid_unfilled,
-                                                   wf, ifehs, wm, imasses,
-                                                   cureep)
-
-            if not getAge(i1) <= logage:
+            if not get_age_cubic(i1) <= logage:
                 return False
-            if (getAge(i2) <= logage):
+            if (get_age_cubic(i2) <= logage):
                 return False
             stop = False
             while not stop:
                 ix = (i1 + i2) // 2
                 if i2 - i1 == 1:
                     stop = True
-                val = getAge(ix)
+                val = get_age_cubic(ix)
                 if val <= logage:
                     i1 = ix
                 elif val > logage:
                     return True
                 else:
                     i2 = ix
-            if np.isnan(getAge(i2)):
+            if np.isnan(get_age_cubic(i2)):
                 return False
             return True
         else:
@@ -1357,29 +1350,27 @@ The interpolation is done in two stages:
                 np.atleast_1d(mass), self.umass, np.atleast_1d(l1mass))
 
             i1, i2 = 0, self.neep - 1
+            get_age_cubic = lambda cureep: utils._interpolator_tricubic_3d_eep(
+                self.logage_grid_unfilled, wf, ifehs, wa, iafes, wm, imasses,
+                cureep)
 
-            def getAge(cureep):
-                return utils._interpolator_tricubic_3d_eep(
-                    self.logage_grid_unfilled, wf, ifehs, wa, iafes, wm,
-                    imasses, cureep)
-
-            if not getAge(i1) <= logage:
+            if not get_age_cubic(i1) <= logage:
                 return False
-            if (getAge(i2) <= logage):
+            if (get_age_cubic(i2) <= logage):
                 return False
             stop = False
             while not stop:
                 ix = (i1 + i2) // 2
                 if i2 - i1 == 1:
                     stop = True
-                val = getAge(ix)
+                val = get_age_cubic(ix)
                 if val <= logage:
                     i1 = ix
                 elif val > logage:
                     return True
                 else:
                     i2 = ix
-            if np.isnan(getAge(i2)):
+            if np.isnan(get_age_cubic(i2)):
                 return False
             return True
 

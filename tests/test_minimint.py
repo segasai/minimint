@@ -77,4 +77,15 @@ def test_example():
             iso = ii(mass, lage, feh)
             assert (np.isfinite(iso['DECam_g']))
 
-    ii.isoInt.getLogAgeFromEEP(1, 140, -1, True)
+    ii.isoInt.getLogAgeFromEEP(1, 140, -1, returnJac=True)
+
+
+def test_v25_optional():
+    if os.environ.get('MIST_V25_TEST') is None:
+        return
+    minimint.download_and_prepare(grid_version="2.5",
+                                  feh_values=[0.0],
+                                  afe_values=[0.0],
+                                  filters=['DECam'])
+    ii = minimint.Interpolator(['DECam_g'], grid_version="2.5")
+    ii(1.0, 9.0, 0.0, afe=0.0)

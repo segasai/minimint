@@ -13,6 +13,25 @@ def get_data_path():
     return path
 
 
+def get_data_path_for_grid(grid_version="1.2", vvcrit=0.4):
+    """
+    Return a data path for a specific MIST grid version and vvcrit.
+    Uses the legacy base path for v1.2/vvcrit=0.4 to preserve compatibility.
+    """
+    base = get_data_path()
+    if grid_version is None:
+        return base
+    grid_version = str(grid_version).lstrip('v')
+    if (grid_version == "1.2"
+            and (vvcrit is None or np.isclose(vvcrit, 0.4))):
+        return base
+    vvcrit_val = 0.4 if vvcrit is None else float(vvcrit)
+    subdir = f"mist_v{grid_version}_vvcrit{vvcrit_val:.1f}"
+    path = os.path.join(base, subdir)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
 def tail_head(fin, nskip, nout):
     """
     Read nout lines from fin after skipping nskip lines
@@ -149,4 +168,58 @@ def _interpolator_tricubic(grid, wf, ifehs, wm, imasses, we, ieeps):
             idx_j = imasses[:, j]
             for k in range(4):
                 res += w_ij * we[:, k] * grid[idx_i, idx_j, ieeps[:, k]]
+    return res
+
+
+def _interpolator_tricubic_3d(grid, w0, idx0, w1, idx1, w2, idx2):
+    """
+    Perform tricubic interpolation over a generic 3D grid.
+    """
+    res = np.zeros(w0.shape[0])
+    for i in range(4):
+        w_i = w0[:, i]
+        idx_i = idx0[:, i]
+        for j in range(4):
+            w_ij = w_i * w1[:, j]
+            idx_j = idx1[:, j]
+            for k in range(4):
+                res += w_ij * w2[:, k] * grid[idx_i, idx_j, idx2[:, k]]
+    return res
+
+
+def _interpolator_tricubic_3d_eep(grid4d, w0, idx0, w1, idx1, w2, idx2, ieep):
+    """
+    Perform tricubic interpolation over a 4D grid at per-point EEP indices.
+    The first three dimensions are interpolated; the last (EEP) is indexed.
+    """
+    res = np.zeros(w0.shape[0])
+    for i in range(4):
+        w_i = w0[:, i]
+        idx_i = idx0[:, i]
+        for j in range(4):
+            w_ij = w_i * w1[:, j]
+            idx_j = idx1[:, j]
+            for k in range(4):
+                res += w_ij * w2[:, k] * grid4d[idx_i, idx_j, idx2[:, k],
+                                                ieep]
+    return res
+
+
+def _interpolator_quadcubic(grid, w0, idx0, w1, idx1, w2, idx2, w3, idx3):
+    """
+    Perform quadcubic interpolation over a generic 4D grid.
+    """
+    res = np.zeros(w0.shape[0])
+    for i in range(4):
+        w_i = w0[:, i]
+        idx_i = idx0[:, i]
+        for j in range(4):
+            w_ij = w_i * w1[:, j]
+            idx_j = idx1[:, j]
+            for k in range(4):
+                w_ijk = w_ij * w2[:, k]
+                idx_k = idx2[:, k]
+                for l in range(4):
+                    res += w_ijk * w3[:, l] * grid[idx_i, idx_j, idx_k,
+                                                   idx3[:, l]]
     return res

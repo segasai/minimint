@@ -33,6 +33,10 @@ The downloading will take some time (20-30 min) and will use significant amount 
 
 If you want to put those processed isochrone files in a location different from the site-packages folder of minimint, you can use the outp_prefix parameter of `download_and_prepare`. You then will need to either specify the location each time when you construct the interpolators or with the MINIMINT_DATA_PATH environment variable.
 
+To use MIST v2.5 with alpha-enhanced grids, pass a grid version and explicit [Fe/H] and [alpha/Fe] values:
+
+``` minimint.download_and_prepare(grid_version="2.5", feh_values=[-4.0, -3.5, -3.0], afe_values=[-0.2, 0.0, 0.2, 0.4, 0.6])```
+
 ## Usage 
 
 In order to create an interpolator object for two filters (your can provide a list of any numbers of filters)
@@ -45,6 +49,12 @@ The interpolator is a callable, so you can call it on mass, log10(age), feh
  
 This returns a dictionary with photometry, logg, logteff and logl.
 mass, logage and feh could arrays. In this case the result will be dictionary of arrays.
+
+For MIST v2.5 grids, supply the grid version and [alpha/Fe]:
+
+```ii = minimint.Interpolator(['DECam_g','DECam_r'], grid_version="2.5")```
+
+``` ii(mass, logage, feh, afe=0.2)``` 
 
 You also can use the interpolator to find the maximum valid mass on the isochrone.
 

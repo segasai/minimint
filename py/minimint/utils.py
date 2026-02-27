@@ -73,12 +73,14 @@ def _get_cubic_coeffs(x, x_grid, j):
     x2 = x_grid[i2]
     x3 = x_grid[i3]
 
-    # Normalized coordinate within the central interval [x1, x2]
+    # Normalized coordinate within the central interval [x1, x2]:
+    # t = (x - x1)/(x2 - x1), so t in [0,1] inside the local cell.
     h = x2 - x1
     h_safe = np.where(h > 0, h, 1.0)
     t = (x - x1) / h_safe
 
-    # Hermite basis functions
+    # Cubic Hermite basis:
+    # h00(t), h10(t), h01(t), h11(t) are the standard cubic polynomials.
     t2 = t * t
     t3 = t2 * t
     h00 = 1 - 3 * t2 + 2 * t3
@@ -86,13 +88,15 @@ def _get_cubic_coeffs(x, x_grid, j):
     h01 = 3 * t2 - 2 * t3
     h11 = t3 - t2
 
-    # Finite difference estimates for derivatives at x1 and x2
+    # Finite-difference estimates of endpoint slopes:
+    # m1 ~ (f2-f0)/(x2-x0), m2 ~ (f3-f1)/(x3-x1).
     dx1 = x2 - x0
     dx1 = np.where(dx1 > 0, dx1, 1.0)
     dx2 = x3 - x1
     dx2 = np.where(dx2 > 0, dx2, 1.0)
 
-    # Combine Hermite basis with derivative weights to get final 4-point weights
+    # Re-express cubic Hermite interpolation as a 4-point weighted sum
+    # over [f0,f1,f2,f3], returning weights w0..w3.
     w0 = -h / dx1 * h10
     w1 = h00 - h / dx2 * h11
     w2 = h01 + h / dx1 * h10
@@ -122,7 +126,8 @@ def _get_cubic_coeffs_deriv(x, x_grid, j):
     h_safe = np.where(h > 0, h, 1.0)
     t = (x - x1) / h_safe
 
-    # Derivatives of the Hermite basis functions
+    # Derivatives of Hermite basis wrt x via chain rule:
+    # d/dx = (1/h) d/dt.
     dt = 1.0 / h_safe
     dh00 = (-6 * t + 6 * t * t) * dt
     dh10 = (1 - 4 * t + 3 * t * t) * dt
@@ -146,6 +151,8 @@ def _interpolator_bicubic(grid, wf, ifehs, wm, imasses, ieep):
     """
     Perform bicubic interpolation over the first two dimensions (metallicity, mass).
     """
+    # Tensor-product cubic in 2D:
+    # f(x,y)=Σ_i Σ_j w_x,i w_y,j f(i,j).
     res = np.zeros(wf.shape[0])
     for i in range(4):
         w_i = wf[:, i]
@@ -159,6 +166,8 @@ def _interpolator_tricubic(grid, wf, ifehs, wm, imasses, we, ieeps):
     """
     Perform tricubic interpolation over all three dimensions (metallicity, mass, EEP).
     """
+    # Tensor-product cubic in 3D:
+    # f(x,y,z)=Σ_i Σ_j Σ_k w_x,i w_y,j w_z,k f(i,j,k).
     res = np.zeros(wf.shape[0])
     for i in range(4):
         w_i = wf[:, i]
@@ -175,6 +184,7 @@ def _interpolator_tricubic_3d(grid, w0, idx0, w1, idx1, w2, idx2):
     """
     Perform tricubic interpolation over a generic 3D grid.
     """
+    # Generic 3D tensor-product cubic.
     res = np.zeros(w0.shape[0])
     for i in range(4):
         w_i = w0[:, i]
@@ -192,6 +202,7 @@ def _interpolator_tricubic_3d_eep(grid4d, w0, idx0, w1, idx1, w2, idx2, ieep):
     Perform tricubic interpolation over a 4D grid at per-point EEP indices.
     The first three dimensions are interpolated; the last (EEP) is indexed.
     """
+    # Cubic over first 3 axes, with EEP taken at fixed index per point.
     res = np.zeros(w0.shape[0])
     for i in range(4):
         w_i = w0[:, i]
@@ -209,6 +220,8 @@ def _interpolator_quadcubic(grid, w0, idx0, w1, idx1, w2, idx2, w3, idx3):
     """
     Perform quadcubic interpolation over a generic 4D grid.
     """
+    # Tensor-product cubic in 4D:
+    # f=Σ_i Σ_j Σ_k Σ_l w0_i w1_j w2_k w3_l f(i,j,k,l).
     res = np.zeros(w0.shape[0])
     for i in range(4):
         w_i = w0[:, i]

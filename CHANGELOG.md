@@ -1,5 +1,6 @@
 # Version 0.6.0
 * switch to cubic interpolation for isochrones and bolometric corrections
+* add `linear=True` option to keep legacy poly-linear interpolation behavior
 * improved robustness at grid boundaries
 
 # Version 0.5.0

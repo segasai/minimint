@@ -3,6 +3,7 @@ import warnings
 import glob
 import os
 import gc
+import itertools
 import subprocess
 import pickle
 import urllib.request
@@ -492,9 +493,58 @@ def _interpolator(grid, C11, C12, C21, C22, ifeh1, ifeh2, imass1, imass2,
             C21 * grid[ifeh2, imass1, ieep] + C22 * grid[ifeh2, imass2, ieep])
 
 
+def _get_polylin_nd_coeffs(coords, axes, left_inds):
+    """
+    Compute generic N-D poly-linear coefficients and vertex indices.
+
+    Parameters
+    ----------
+    coords: list of arrays
+        Coordinate values per axis, each length N.
+    axes: list of arrays
+        Grid vectors per axis.
+    left_inds: list of arrays
+        Left indices per axis, each length N.
+    """
+    ndim = len(coords)
+    left = np.stack(left_inds, axis=1)
+    # Per-axis normalized coordinate x in [0,1] inside the enclosing cell:
+    # x = (p - grid[left]) / (grid[left+1] - grid[left]).
+    frac = np.stack([
+        (coords[i] - axes[i][left_inds[i]]) /
+        (axes[i][left_inds[i] + 1] - axes[i][left_inds[i]])
+        for i in range(ndim)
+    ],
+                    axis=1)
+    box = np.array(list(itertools.product(*[[0, 1]] * ndim)), dtype=int)
+    # Poly-linear basis over hypercube vertices:
+    # w_v = Π_d x_d^a_{v,d} (1-x_d)^(1-a_{v,d}),  a_{v,d}∈{0,1}.
+    coeff = (frac[None, :, :]**box[:, None, :] *
+             (1 - frac[None, :, :])**(1 - box)[:, None, :]).prod(axis=2)
+    inds = left[None, :, :] + box[:, None, :]
+    return coeff, inds
+
+
+def _interpolator_polylin_nd(grid, coeff, inds, ieep):
+    """
+    Evaluate generic N-D poly-linear interpolation over grid[..., eep].
+    """
+    nvert, npts, ndim = inds.shape
+    res = np.zeros(npts)
+    # Evaluate f(p) = Σ_v w_v f(vertex_v) for each target point.
+    for v in range(nvert):
+        idx = tuple(inds[v, :, d] for d in range(ndim)) + (ieep, )
+        res += coeff[v] * grid[idx]
+    return res
+
+
 class TheoryInterpolator:
 
-    def __init__(self, prefix=None, grid_version="1.2", vvcrit=0.4):
+    def __init__(self,
+                 prefix=None,
+                 grid_version="1.2",
+                 vvcrit=0.4,
+                 linear=False):
         """
         Construct the interpolator that computes theoretical
         quantities (logg, logl, logteff) given (mass, logage, feh)
@@ -507,6 +557,7 @@ class TheoryInterpolator:
         if prefix is None:
             grid_version = _normalize_grid_version(grid_version)
             prefix = utils.get_data_path_for_grid(grid_version, vvcrit)
+        self.linear = bool(linear)
         meta_path = os.path.join(prefix, INTERP_NPZ)
         if not os.path.exists(meta_path):
             legacy = os.path.join(prefix, INTERP_PKL)
@@ -584,18 +635,6 @@ class TheoryInterpolator:
             np.atleast_1d(np.asarray(afe, dtype=np.float64)))
 
         N = len(logage)
-        if self.grid_ndim == 3:
-            DD = self._get_eep_coeffs_3d(mass, logage, feh)
-            wf, ifehs, wm, imasses = (DD['wf'], DD['ifehs'], DD['wm'],
-                                      DD['imasses'])
-            we, ieeps, bad = (DD['we'], DD['ieeps'], DD['bad'])
-        else:
-            DD = self._get_eep_coeffs_4d(mass, logage, feh, afe)
-            wf, ifehs, wa, iafes, wm, imasses = (DD['wf'], DD['ifehs'],
-                                                 DD['wa'], DD['iafes'],
-                                                 DD['wm'], DD['imasses'])
-            we, ieeps, bad = (DD['we'], DD['ieeps'], DD['bad'])
-        good = ~bad
         D_grids = {
             'logg': self.logg_grid,
             'logteff': self.logteff_grid,
@@ -603,25 +642,57 @@ class TheoryInterpolator:
             'phase': self.phase_grid
         }
         xret = {}
-        if self.grid_ndim == 3:
-            (wf_good, ifehs_good, wm_good, imasses_good, we_good,
-             ieeps_good) = [
-                 _[good] for _ in [wf, ifehs, wm, imasses, we, ieeps]
-             ]
+        if self.linear:
+            if self.grid_ndim == 3:
+                DD = self._get_eep_coeffs_3d_linear(mass, logage, feh)
+            else:
+                DD = self._get_eep_coeffs_4d_linear(mass, logage, feh, afe)
+            bad = DD['bad']
+            good = ~bad
             for curkey, curarr in D_grids.items():
-                xret[curkey] = utils._interpolator_tricubic(
-                    curarr, wf_good, ifehs_good, wm_good, imasses_good,
-                    we_good, ieeps_good)
+                c1 = DD['coeff'][:, good]
+                i1 = DD['inds'][:, good, :]
+                e1 = DD['eep1'][good]
+                e2 = DD['eep2'][good]
+                ef = DD['eep_frac'][good]
+                # Two-stage legacy scheme:
+                # 1) poly-linear in (feh, [afe], mass) at fixed EEP endpoints,
+                # 2) linear blend along EEP with fraction ef.
+                v1 = _interpolator_polylin_nd(curarr, c1, i1, e1)
+                v2 = _interpolator_polylin_nd(curarr, c1, i1, e2)
+                xret[curkey] = v1 * (1 - ef) + ef * v2
         else:
-            (wf_good, ifehs_good, wa_good, iafes_good, wm_good,
-             imasses_good, we_good, ieeps_good) = [
-                 _[good]
-                 for _ in [wf, ifehs, wa, iafes, wm, imasses, we, ieeps]
-             ]
-            for curkey, curarr in D_grids.items():
-                xret[curkey] = utils._interpolator_quadcubic(
-                    curarr, wf_good, ifehs_good, wa_good, iafes_good,
-                    wm_good, imasses_good, we_good, ieeps_good)
+            if self.grid_ndim == 3:
+                DD = self._get_eep_coeffs_3d(mass, logage, feh)
+                wf, ifehs, wm, imasses = (DD['wf'], DD['ifehs'], DD['wm'],
+                                          DD['imasses'])
+                we, ieeps, bad = (DD['we'], DD['ieeps'], DD['bad'])
+            else:
+                DD = self._get_eep_coeffs_4d(mass, logage, feh, afe)
+                wf, ifehs, wa, iafes, wm, imasses = (DD['wf'], DD['ifehs'],
+                                                     DD['wa'], DD['iafes'],
+                                                     DD['wm'], DD['imasses'])
+                we, ieeps, bad = (DD['we'], DD['ieeps'], DD['bad'])
+            good = ~bad
+            if self.grid_ndim == 3:
+                (wf_good, ifehs_good, wm_good, imasses_good, we_good,
+                 ieeps_good) = [
+                     _[good] for _ in [wf, ifehs, wm, imasses, we, ieeps]
+                 ]
+                for curkey, curarr in D_grids.items():
+                    xret[curkey] = utils._interpolator_tricubic(
+                        curarr, wf_good, ifehs_good, wm_good, imasses_good,
+                        we_good, ieeps_good)
+            else:
+                (wf_good, ifehs_good, wa_good, iafes_good, wm_good,
+                 imasses_good, we_good, ieeps_good) = [
+                     _[good]
+                     for _ in [wf, ifehs, wa, iafes, wm, imasses, we, ieeps]
+                 ]
+                for curkey, curarr in D_grids.items():
+                    xret[curkey] = utils._interpolator_quadcubic(
+                        curarr, wf_good, ifehs_good, wa_good, iafes_good,
+                        wm_good, imasses_good, we_good, ieeps_good)
 
         ret = {}
         for k in ['logg', 'logteff', 'logl', 'phase']:
@@ -642,6 +713,67 @@ class TheoryInterpolator:
         neep = self.neep
         N = len(feh)
         eep1 = eep.astype(int)
+        if self.linear:
+            eep2 = eep1 + 1
+            if self.grid_ndim == 3:
+                if not self._warned_afe:
+                    if np.any(~np.isclose(afe, 0.0)):
+                        warnings.warn(
+                            '[alpha/Fe] is ignored for MIST v1.2 grids.')
+                        self._warned_afe = True
+                l1feh = np.searchsorted(self.ufeh, feh) - 1
+                l1mass = np.searchsorted(self.umass, mass) - 1
+                bad = np.zeros(N, dtype=bool)
+                bad = bad | (l1mass + 1 >= len(self.umass)) | (
+                    l1feh + 1 >= len(self.ufeh)) | (l1mass < 0) | (
+                        l1feh < 0) | (eep2 >= neep) | (eep1 < 0)
+                l1feh[bad] = 0
+                l1mass[bad] = 0
+                eep1[bad] = 0
+                eep2[bad] = 1
+                coeff, inds = _get_polylin_nd_coeffs([feh, mass],
+                                                     [self.ufeh, self.umass],
+                                                     [l1feh, l1mass])
+            else:
+                l1feh = np.searchsorted(self.ufeh, feh) - 1
+                l1afe = np.searchsorted(self.uafe, afe) - 1
+                l1mass = np.searchsorted(self.umass, mass) - 1
+                bad = np.zeros(N, dtype=bool)
+                bad = bad | (l1mass + 1 >= len(self.umass)) | (
+                    l1feh + 1 >= len(self.ufeh)) | (
+                        l1afe + 1 >= len(self.uafe)) | (l1mass < 0) | (
+                            l1feh < 0) | (l1afe < 0) | (eep2 >= neep) | (
+                                eep1 < 0)
+                l1feh[bad] = 0
+                l1afe[bad] = 0
+                l1mass[bad] = 0
+                eep1[bad] = 0
+                eep2[bad] = 1
+                coeff, inds = _get_polylin_nd_coeffs(
+                    [feh, afe, mass], [self.ufeh, self.uafe, self.umass],
+                    [l1feh, l1afe, l1mass])
+
+            eep_frac = eep - eep1
+            good = ~bad
+            ret_logage = np.zeros_like(mass) + np.nan
+            if np.any(good):
+                # logage(EEP) on legacy mode is linear in the local [eep1,eep2] segment.
+                logage1 = _interpolator_polylin_nd(self.logage_grid,
+                                                   coeff[:, good],
+                                                   inds[:, good, :],
+                                                   eep1[good])
+                logage2 = _interpolator_polylin_nd(self.logage_grid,
+                                                   coeff[:, good],
+                                                   inds[:, good, :],
+                                                   eep2[good])
+                ret_logage[good] = (logage1 * (1 - eep_frac[good]) +
+                                    eep_frac[good] * logage2)
+            if returnJac:
+                jac = np.zeros_like(mass) + np.nan
+                if np.any(good):
+                    jac[good] = logage2 - logage1
+                return ret_logage, jac
+            return ret_logage
 
         if self.grid_ndim == 3:
             if not self._warned_afe:
@@ -897,6 +1029,8 @@ The interpolation is done in two stages:
                                                imasses, dwe, ieeps)
             # only update good points and keep them within the bracket
             # found by binary search
+            # Newton step on F(eep)=age_cubic(eep)-target_age:
+            # eep <- eep - F/F'  with F'=d(age)/d(eep).
             step = (curr_age[good] - logage[good]) / np.where(
                 curr_dage[good] > 0, curr_dage[good], 1e-10)
             eep_float[good] = np.clip(eep_float[good] - step, lefts[good],
@@ -971,6 +1105,7 @@ The interpolation is done in two stages:
             curr_dage = utils._interpolator_quadcubic(self.logage_grid, wf,
                                                       ifehs, wa, iafes, wm,
                                                       imasses, dwe, ieeps)
+            # Same Newton refinement in 4D coefficient space.
             step = (curr_age[good] - logage[good]) / np.where(
                 curr_dage[good] > 0, curr_dage[good], 1e-10)
             eep_float[good] = np.clip(eep_float[good] - step, lefts[good],
@@ -988,6 +1123,96 @@ The interpolation is done in two stages:
                     ieeps=ieeps,
                     bad=bads)
 
+    def _get_eep_coeffs_3d_linear(self, mass, logage, feh):
+        feh, mass, logage = [
+            np.atleast_1d(np.asarray(_, dtype=np.float64))
+            for _ in [feh, mass, logage]
+        ]
+        N = len(logage)
+        l1feh = np.searchsorted(self.ufeh, feh) - 1
+        l2feh = l1feh + 1
+        l1mass = np.searchsorted(self.umass, mass) - 1
+        l2mass = l1mass + 1
+        bads = np.zeros(N, dtype=bool)
+        bads = bads | (l2mass >= len(self.umass)) | (l2feh >= len(
+            self.ufeh)) | (l1mass < 0) | (l1feh < 0)
+        l1mass[bads] = 0
+        l2mass[bads] = 1
+        l1feh[bads] = 0
+        l2feh[bads] = 1
+
+        coeff, inds = _get_polylin_nd_coeffs([feh, mass],
+                                             [self.ufeh, self.umass],
+                                             [l1feh, l1mass])
+
+        def getAge(cureep, subset):
+            # Age at integer EEP from bilinear interpolation in (feh,mass).
+            return _interpolator_polylin_nd(self.logage_grid_unfilled,
+                                            coeff[:, subset], inds[:, subset, :],
+                                            cureep)
+
+        lefts, rights, bads = _binary_search(bads, logage, self.neep, getAge)
+        LV = np.zeros(len(mass))
+        RV = LV + 1
+        good = ~bads
+        LV[good] = getAge(lefts[good], good)
+        RV[good] = getAge(rights[good], good)
+        # eep_frac solves: logage = LV*(1-f) + RV*f  =>  f = (logage-LV)/(RV-LV)
+        eep_frac = (logage - LV) / (RV - LV)
+        return dict(coeff=coeff,
+                    inds=inds,
+                    eep_frac=eep_frac,
+                    bad=bads,
+                    eep1=lefts,
+                    eep2=rights)
+
+    def _get_eep_coeffs_4d_linear(self, mass, logage, feh, afe):
+        feh, mass, logage, afe = [
+            np.atleast_1d(np.asarray(_, dtype=np.float64))
+            for _ in [feh, mass, logage, afe]
+        ]
+        N = len(logage)
+        l1feh = np.searchsorted(self.ufeh, feh) - 1
+        l2feh = l1feh + 1
+        l1afe = np.searchsorted(self.uafe, afe) - 1
+        l2afe = l1afe + 1
+        l1mass = np.searchsorted(self.umass, mass) - 1
+        l2mass = l1mass + 1
+        bads = np.zeros(N, dtype=bool)
+        bads = bads | (l2mass >= len(self.umass)) | (l2feh >= len(
+            self.ufeh)) | (l2afe >= len(self.uafe)) | (l1mass < 0) | (
+                l1feh < 0) | (l1afe < 0)
+        l1mass[bads] = 0
+        l2mass[bads] = 1
+        l1feh[bads] = 0
+        l2feh[bads] = 1
+        l1afe[bads] = 0
+        l2afe[bads] = 1
+
+        coeff, inds = _get_polylin_nd_coeffs([feh, afe, mass],
+                                             [self.ufeh, self.uafe, self.umass],
+                                             [l1feh, l1afe, l1mass])
+
+        def getAge(cureep, subset):
+            # Age at integer EEP from trilinear interpolation in (feh,afe,mass).
+            return _interpolator_polylin_nd(self.logage_grid_unfilled,
+                                            coeff[:, subset], inds[:, subset, :],
+                                            cureep)
+
+        lefts, rights, bads = _binary_search(bads, logage, self.neep, getAge)
+        LV = np.zeros(len(mass))
+        RV = LV + 1
+        good = ~bads
+        LV[good] = getAge(lefts[good], good)
+        RV[good] = getAge(rights[good], good)
+        eep_frac = (logage - LV) / (RV - LV)
+        return dict(coeff=coeff,
+                    inds=inds,
+                    eep_frac=eep_frac,
+                    bad=bads,
+                    eep1=lefts,
+                    eep2=rights)
+
     def _isvalid(self, mass, logage, feh, afe=0.0, l1feh=None, l1afe=None):
         """
         Checks if the point on the isochrone is valid
@@ -995,6 +1220,77 @@ The interpolation is done in two stages:
         mass = np.float64(mass)
         logage = np.float64(logage)
         feh = np.float64(feh)
+        if self.linear:
+            if self.grid_ndim == 3:
+                if l1feh is None:
+                    l1feh = np.searchsorted(self.ufeh, feh) - 1
+                l2feh = l1feh + 1
+                l1mass = np.searchsorted(self.umass, mass) - 1
+                l2mass = l1mass + 1
+
+                if ((l2mass >= len(self.umass)) or (l2feh >= len(self.ufeh))
+                        or (l1mass < 0) or (l1feh < 0)):
+                    return False
+
+                coeff, inds = _get_polylin_nd_coeffs(
+                    [np.atleast_1d(feh), np.atleast_1d(mass)],
+                    [self.ufeh, self.umass],
+                    [np.atleast_1d(l1feh), np.atleast_1d(l1mass)])
+
+                i1, i2 = 0, self.neep - 1
+
+                def getAge(cureep):
+                    return _interpolator_polylin_nd(self.logage_grid_unfilled,
+                                                    coeff, inds, cureep)
+            else:
+                afe = np.float64(afe)
+                if l1feh is None:
+                    l1feh = np.searchsorted(self.ufeh, feh) - 1
+                if l1afe is None:
+                    l1afe = np.searchsorted(self.uafe, afe) - 1
+                l2feh = l1feh + 1
+                l2afe = l1afe + 1
+                l1mass = np.searchsorted(self.umass, mass) - 1
+                l2mass = l1mass + 1
+
+                if ((l2mass >= len(self.umass)) or (l2feh >= len(self.ufeh))
+                        or (l2afe >= len(self.uafe)) or (l1mass < 0)
+                        or (l1feh < 0) or (l1afe < 0)):
+                    return False
+
+                coeff, inds = _get_polylin_nd_coeffs(
+                    [np.atleast_1d(feh), np.atleast_1d(afe),
+                     np.atleast_1d(mass)],
+                    [self.ufeh, self.uafe, self.umass],
+                    [np.atleast_1d(l1feh), np.atleast_1d(l1afe),
+                     np.atleast_1d(l1mass)])
+
+                i1, i2 = 0, self.neep - 1
+
+                def getAge(cureep):
+                    return _interpolator_polylin_nd(self.logage_grid_unfilled,
+                                                    coeff, inds, cureep)
+
+            if not getAge(i1) <= logage:
+                return False
+            if (getAge(i2) <= logage):
+                return False
+            stop = False
+            while not stop:
+                ix = (i1 + i2) // 2
+                if i2 - i1 == 1:
+                    stop = True
+                val = getAge(ix)
+                if val <= logage:
+                    i1 = ix
+                elif val > logage:
+                    return True
+                else:
+                    i2 = ix
+            if np.isnan(getAge(i2)):
+                return False
+            return True
+
         if self.grid_ndim == 3:
             if l1feh is None:
                 l1feh = np.searchsorted(self.ufeh, feh) - 1
@@ -1124,7 +1420,8 @@ class Interpolator:
                  filts,
                  data_prefix=None,
                  grid_version="1.2",
-                 vvcrit=0.4):
+                 vvcrit=0.4,
+                 linear=False):
         """
         Initialize the interpolator class, specifying filter names
         and optionally the folder where the preprocessed isochrones lie
@@ -1141,8 +1438,9 @@ class Interpolator:
             data_prefix = utils.get_data_path_for_grid(grid_version, vvcrit)
         self.isoInt = TheoryInterpolator(data_prefix,
                                          grid_version=grid_version,
-                                         vvcrit=vvcrit)
-        self.bolomInt = bolom.BCInterpolator(data_prefix, filts)
+                                         vvcrit=vvcrit,
+                                         linear=linear)
+        self.bolomInt = bolom.BCInterpolator(data_prefix, filts, linear=linear)
 
     def __call__(self, mass, logage, feh, afe=0.0):
         """

@@ -43,6 +43,10 @@ In order to create an interpolator object for two filters (your can provide a li
 
 ```ii = minimint.Interpolator(['DECam_g','DECam_r'])```
 
+To force legacy poly-linear interpolation (instead of cubic), use:
+
+```ii = minimint.Interpolator(['DECam_g','DECam_r'], linear=True)```
+
 The interpolator is a callable, so you can call it on mass, log10(age), feh 
 
 ``` ii(mass, logage, feh)``` 

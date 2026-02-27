@@ -21,6 +21,8 @@ def _interpolator_4cubic(grid, ws, idxs):
     ws: list of 4 weight arrays, each of shape (N, 4)
     idxs: list of 4 index arrays, each of shape (N, 4)
     """
+    # 4D tensor-product cubic:
+    # f=Σ_i Σ_j Σ_k Σ_l w0_i w1_j w2_k w3_l f(i,j,k,l)
     res = np.zeros(ws[0].shape[0])
     for i in range(4):
         w_i = ws[0][:, i]
@@ -43,6 +45,8 @@ def _interpolator_5cubic(grid, ws, idxs):
     Perform 5D cubic interpolation for bolometric corrections.
     The dimensions are usually logTeff, logg, [Fe/H], [alpha/Fe], and Av.
     """
+    # 5D tensor-product cubic:
+    # f=Σ_i Σ_j Σ_k Σ_l Σ_m Π_d w_d * f(vertex)
     res = np.zeros(ws[0].shape[0])
     for i in range(4):
         w_i = ws[0][:, i]
@@ -131,7 +135,7 @@ def read_bolom(filt, iprefix):
 
 class BCInterpolator:
 
-    def __init__(self, prefix, filts):
+    def __init__(self, prefix, filts, linear=False):
         filts = set(filts)
         vec = np.load(prefix + '/' + POINTS_NPY)
         ndim = vec.shape[0]
@@ -149,6 +153,7 @@ class BCInterpolator:
         for a in itertools.product(*[[0, 1]] * self.ndim):
             self.box_list.append((a))
         self.box_list = np.array(self.box_list)
+        self.linear = bool(linear)
         self._warned_feh_floor = False
         for f in filts:
             curd = np.zeros(size) - np.nan
@@ -170,6 +175,8 @@ class BCInterpolator:
         bad = np.zeros(p.shape[0], dtype=bool)
         ws = []
         idxs = []
+        pos1 = np.zeros(p.shape, dtype=int)
+        xs = np.zeros(p.shape)
         for i in range(self.ndim):
             p_dim = p[:, i]
             # For BC interpolation, clamp very metal-poor values to the BC
@@ -185,14 +192,26 @@ class BCInterpolator:
                 p_dim = clipped
             pos = np.searchsorted(self.uvecs[i], p_dim, 'right') - 1
             bad = bad | (pos < 0) | (pos >= (len(self.uvecs[i]) - 1))
-            # Clip pos for cubic neighbors
-            pos_clipped = np.clip(pos, 0, len(self.uvecs[i]) - 2)
-            w, idx = _get_cubic_coeffs(p_dim, self.uvecs[i], pos_clipped)
-            ws.append(w)
-            idxs.append(idx)
+            pos1[:, i] = np.clip(pos, 0, len(self.uvecs[i]) - 2)
+            xs[:, i] = (p_dim - self.uvecs[i][pos1[:, i]]) / (
+                self.uvecs[i][pos1[:, i] + 1] - self.uvecs[i][pos1[:, i]])
+            if not self.linear:
+                w, idx = _get_cubic_coeffs(p_dim, self.uvecs[i], pos1[:, i])
+                ws.append(w)
+                idxs.append(idx)
 
         for f in self.filts:
-            if self.ndim == 4:
+            if self.linear:
+                curinds = pos1[None, :, :] + self.box_list[:, None, :]
+                # N-D poly-linear interpolation over BC grid:
+                # BC(p) = Σ_v [Π_d x_d^a_{v,d}(1-x_d)^(1-a_{v,d})] * BC(vertex_v)
+                curcoeffs = (
+                    xs[None, :, :]**self.box_list[:, None, :] *
+                    (1 - xs[None, :, :])**(1 - self.box_list)[:, None, :]
+                ).prod(axis=2)
+                curinds1 = np.ravel_multi_index(curinds.T, self.dats[f].shape)
+                curres = (self.dats[f].flat[curinds1] * curcoeffs.T).sum(axis=1)
+            elif self.ndim == 4:
                 curres = _interpolator_4cubic(self.dats[f], ws, idxs)
             elif self.ndim == 5:
                 curres = _interpolator_5cubic(self.dats[f], ws, idxs)

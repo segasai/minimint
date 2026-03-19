@@ -415,17 +415,20 @@ class TheoryInterpolator:
             'phase': self.phase_grid
         }
         xret = {}
+        eep_m1_good = np.clip(eep1_good - 1, 0, self.neep - 1)
+        eep_0_good = eep1_good
+        eep_1_good = eep2_good
+        eep_2_good = np.clip(eep2_good + 1, 0, self.neep - 1)
+
         for curkey, curarr in DD.items():
             curr = []
-            for j, cureep in enumerate([eep1_good, eep2_good]):
+            for j, cureep in enumerate([eep_m1_good, eep_0_good, eep_1_good, eep_2_good]):
                 curr.append(
                     _interpolator(curarr, C11_good, C12_good, C21_good,
                                   C22_good, l1feh_good, l2feh_good,
                                   l1mass_good, l2mass_good, cureep))
-            xret[curkey] = curr[0] + eep_frac_good * (curr[1] - curr[0])
-            # perfoming the linear interpolation with age
-            # the formula is (1-eep_frac) * V_left +  eep_frac V_right
-            # so V_left  + eep_frac * (V_right - V_left)
+            xret[curkey] = utils.steffen_interp(curr[0], curr[1], curr[2], curr[3], eep_frac_good)
+            # perfoming the steffen piecewise-monotonic cubic interpolation with age
 
         ret = {}
         for k in ['logg', 'logteff', 'logl', 'phase']:
@@ -474,14 +477,22 @@ class TheoryInterpolator:
                                  l2mass[goodsel], cureep)
 
         ret_logage = np.zeros_like(mass)
-        logage1 = getAge(eep1)
-        logage2 = getAge(eep2)
-        # these are boundaries in the age grid
-        ret_logage[goodsel] = logage1 * (1 - eep_frac[goodsel]) + (
-            eep_frac[goodsel]) * logage2
+        if goodsel.any():
+            eep_m1 = np.clip(eep1 - 1, 0, neep - 1)
+            eep_0 = eep1
+            eep_1 = eep2
+            eep_2 = np.clip(eep2 + 1, 0, neep - 1)
+
+            logage_m1 = getAge(eep_m1)
+            logage_0 = getAge(eep_0)
+            logage_1 = getAge(eep_1)
+            logage_2 = getAge(eep_2)
+
+            ret_logage[goodsel] = utils.steffen_interp(logage_m1, logage_0, logage_1, logage_2, eep_frac[goodsel])
+        
         if returnJac:
             jac = mass * 0
-            jac[goodsel] = logage2 - logage1
+            jac[goodsel] = logage_1 - logage_0
             ret = (ret_logage, jac)
         else:
             ret = ret_logage
@@ -591,11 +602,22 @@ The interpolation is done in two stages:
                                  cureep)
 
         lefts, rights, bads = _binary_search(bads, logage, self.neep, getAge)
-        LV = np.zeros(len(mass))
-        RV = LV + 1
-        LV[~bads] = getAge(lefts[~bads], ~bads)
-        RV[~bads] = getAge(rights[~bads], ~bads)
-        eep_frac = (logage - LV) / (RV - LV)
+        eep_frac = np.zeros(len(mass))
+        
+        good = ~bads
+        if good.any():
+            left_m1 = np.clip(lefts[good] - 1, 0, self.neep - 1)
+            left_0 = lefts[good]
+            right_1 = rights[good]
+            right_2 = np.clip(rights[good] + 1, 0, self.neep - 1)
+
+            y_m1 = getAge(left_m1, good)
+            y_0 = getAge(left_0, good)
+            y_1 = getAge(right_1, good)
+            y_2 = getAge(right_2, good)
+
+            eep_frac[good] = utils.solve_steffen_t(y_m1, y_0, y_1, y_2, logage[good])
+        
         # eep_frac is the coefficient for interpolation in EEP axis
         # 0<=eep_frac<1
         # eep1 is the position in the EEP axis (essentially floor(EEP))

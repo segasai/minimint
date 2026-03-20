@@ -6,6 +6,17 @@ import astropy.table as atpy
 import numpy as np
 from .utils import get_data_path, tail_head, _get_cubic_coeffs
 
+try:
+    from numba import njit
+    HAS_NUMBA = True
+except Exception:  # pragma: no cover - fallback path
+    HAS_NUMBA = False
+
+    def njit(*args, **kwargs):  # pragma: no cover - fallback path
+        def _wrap(func):
+            return func
+        return _wrap
+
 POINTS_NPY = 'bolom_points.npy'
 FILT_NPY = 'filt_%s.npy'
 
@@ -14,6 +25,9 @@ def _interpolator_4cubic(grid, ws, idxs):
     """
     Perform 4D cubic interpolation for bolometric corrections.
     """
+    if HAS_NUMBA:
+        return _interpolator_4cubic_numba(grid, ws[0], idxs[0], ws[1], idxs[1],
+                                          ws[2], idxs[2], ws[3], idxs[3])
     res = np.zeros(ws[0].shape[0])
     for i in range(4):
         w_i = ws[0][:, i]
@@ -29,6 +43,27 @@ def _interpolator_4cubic(grid, ws, idxs):
                     idx_l = idxs[3][:, l]
                     res += w_ijkl * grid[idx_i, idx_j, idx_k, idx_l]
     return res
+
+
+@njit(cache=True)
+def _interpolator_4cubic_numba(grid, w0, i0, w1, i1, w2, i2, w3, i3):
+    n = w0.shape[0]
+    out = np.zeros(n, dtype=np.float64)
+    for t in range(n):
+        acc = 0.0
+        for a in range(4):
+            wa = w0[t, a]
+            ia = i0[t, a]
+            for b in range(4):
+                wab = wa * w1[t, b]
+                ib = i1[t, b]
+                for c in range(4):
+                    wabc = wab * w2[t, c]
+                    ic = i2[t, c]
+                    for d in range(4):
+                        acc += wabc * w3[t, d] * grid[ia, ib, ic, i3[t, d]]
+        out[t] = acc
+    return out
 
 
 def read_bolom(filt, iprefix):

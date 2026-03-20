@@ -3,6 +3,17 @@ import pathlib
 import tempfile
 import numpy as np
 
+try:
+    from numba import njit
+    HAS_NUMBA = True
+except Exception:  # pragma: no cover - fallback path
+    HAS_NUMBA = False
+
+    def njit(*args, **kwargs):  # pragma: no cover - fallback path
+        def _wrap(func):
+            return func
+        return _wrap
+
 
 def get_data_path():
     path = os.environ.get('MINIMINT_DATA_PATH')
@@ -117,7 +128,11 @@ def _interpolator_bicubic(grid, wf, ifehs, wm, imasses, ieep):
     Perform bicubic interpolation over the first two dimensions
     (metallicity, mass) at fixed ieep.
     """
-    res = np.zeros(wf.shape[0])
+    if HAS_NUMBA:
+        return _interpolator_bicubic_numba(grid, wf, ifehs, wm, imasses,
+                                           np.asarray(ieep, dtype=np.int64))
+    res = np.zeros(wf.shape[0], dtype=np.float64)
+    ieep = np.asarray(ieep, dtype=np.int64)
     for i in range(4):
         w_i = wf[:, i]
         idx_i = ifehs[:, i]
@@ -130,7 +145,11 @@ def _interpolator_tricubic(grid, wf, ifehs, wm, imasses, we, ieeps):
     """
     Perform tricubic interpolation over (metallicity, mass, EEP).
     """
-    res = np.zeros(wf.shape[0])
+    if HAS_NUMBA:
+        return _interpolator_tricubic_numba(grid, wf, ifehs, wm, imasses, we,
+                                            np.asarray(ieeps, dtype=np.int64))
+    res = np.zeros(wf.shape[0], dtype=np.float64)
+    ieeps = np.asarray(ieeps, dtype=np.int64)
     for i in range(4):
         w_i = wf[:, i]
         idx_i = ifehs[:, i]
@@ -140,6 +159,40 @@ def _interpolator_tricubic(grid, wf, ifehs, wm, imasses, we, ieeps):
             for k in range(4):
                 res += w_ij * we[:, k] * grid[idx_i, idx_j, ieeps[:, k]]
     return res
+
+
+@njit(cache=True)
+def _interpolator_bicubic_numba(grid, wf, ifehs, wm, imasses, ieep):
+    n = wf.shape[0]
+    out = np.zeros(n, dtype=np.float64)
+    for t in range(n):
+        acc = 0.0
+        e = ieep[t]
+        for i in range(4):
+            wi = wf[t, i]
+            ii = ifehs[t, i]
+            for j in range(4):
+                acc += wi * wm[t, j] * grid[ii, imasses[t, j], e]
+        out[t] = acc
+    return out
+
+
+@njit(cache=True)
+def _interpolator_tricubic_numba(grid, wf, ifehs, wm, imasses, we, ieeps):
+    n = wf.shape[0]
+    out = np.zeros(n, dtype=np.float64)
+    for t in range(n):
+        acc = 0.0
+        for i in range(4):
+            wi = wf[t, i]
+            ii = ifehs[t, i]
+            for j in range(4):
+                wij = wi * wm[t, j]
+                jj = imasses[t, j]
+                for k in range(4):
+                    acc += wij * we[t, k] * grid[ii, jj, ieeps[t, k]]
+        out[t] = acc
+    return out
 
 
 def steffen_interp(y_m1, y_0, y_1, y_2, t):

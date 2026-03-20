@@ -4,10 +4,31 @@ import re
 import os
 import astropy.table as atpy
 import numpy as np
-from .utils import get_data_path, tail_head
+from .utils import get_data_path, tail_head, _get_cubic_coeffs
 
 POINTS_NPY = 'bolom_points.npy'
 FILT_NPY = 'filt_%s.npy'
+
+
+def _interpolator_4cubic(grid, ws, idxs):
+    """
+    Perform 4D cubic interpolation for bolometric corrections.
+    """
+    res = np.zeros(ws[0].shape[0])
+    for i in range(4):
+        w_i = ws[0][:, i]
+        idx_i = idxs[0][:, i]
+        for j in range(4):
+            w_ij = w_i * ws[1][:, j]
+            idx_j = idxs[1][:, j]
+            for k in range(4):
+                w_ijk = w_ij * ws[2][:, k]
+                idx_k = idxs[2][:, k]
+                for l in range(4):
+                    w_ijkl = w_ijk * ws[3][:, l]
+                    idx_l = idxs[3][:, l]
+                    res += w_ijkl * grid[idx_i, idx_j, idx_k, idx_l]
+    return res
 
 
 def read_bolom(filt, iprefix):
@@ -45,7 +66,6 @@ def read_bolom(filt, iprefix):
 class BCInterpolator:
 
     def __init__(self, prefix, filts):
-        import scipy.interpolate
         filts = set(filts)
         vec = np.load(prefix + '/' + POINTS_NPY)
         ndim = 4
@@ -56,14 +76,16 @@ class BCInterpolator:
         size = [len(self.uvecs[_]) for _ in range(ndim)]
         self.filts = filts
         self.dats = {}
-        self.interps = {}
+
+        self.box_list = []
+        for a in itertools.product(*[[0, 1]] * self.ndim):
+            self.box_list.append((a))
+        self.box_list = np.array(self.box_list)
 
         for f in filts:
             curd = np.zeros(size) - np.nan
             curd[tuple(self.uids)] = np.load(prefix + '/' + FILT_NPY % (f, ))
             self.dats[f] = curd
-            self.interps[f] = scipy.interpolate.RegularGridInterpolator(
-                self.uvecs, self.dats[f], method='linear', bounds_error=False, fill_value=np.nan)
 
     def __call__(self, p):
         """
@@ -74,8 +96,20 @@ class BCInterpolator:
         and N for the number of stars
         """
         res = {}
+        bad = np.zeros(p.shape[0], dtype=bool)
+        ws = []
+        idxs = []
+        for i in range(self.ndim):
+            pos = np.searchsorted(self.uvecs[i], p[:, i], 'right') - 1
+            bad = bad | (pos < 0) | (pos >= (len(self.uvecs[i]) - 1))
+            pos_clipped = np.clip(pos, 0, len(self.uvecs[i]) - 2)
+            w, idx = _get_cubic_coeffs(p[:, i], self.uvecs[i], pos_clipped)
+            ws.append(w)
+            idxs.append(idx)
         for f in self.filts:
-            res[f] = self.interps[f](p)
+            curres = _interpolator_4cubic(self.dats[f], ws, idxs)
+            res[f] = curres
+            res[f][bad] = np.nan
         return res
 
 

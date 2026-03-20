@@ -333,6 +333,24 @@ def _binary_search(bads, logage, neep, getAge):
     return lefts, rights, bads
 
 
+def _get_polylin_coeff(feh, ufeh, mass, umass, feh_ind1, feh_ind2, mass_ind1,
+                       mass_ind2):
+    x = (feh - ufeh[feh_ind1]) / (ufeh[feh_ind2] - ufeh[feh_ind1])
+    y = (mass - umass[mass_ind1]) / (umass[mass_ind2] - umass[mass_ind1])
+    C11 = (1 - x) * (1 - y)
+    C12 = (1 - x) * y
+    C21 = x * (1 - y)
+    C22 = x * y
+    return C11, C12, C21, C22
+
+
+def _interpolator(grid, C11, C12, C21, C22, ifeh1, ifeh2, imass1, imass2,
+                  ieep):
+    ieep = np.asarray(ieep, dtype=int)
+    return (C11 * grid[ifeh1, imass1, ieep] + C12 * grid[ifeh1, imass2, ieep] +
+            C21 * grid[ifeh2, imass1, ieep] + C22 * grid[ifeh2, imass2, ieep])
+
+
 class TheoryInterpolator:
 
     def __init__(self, prefix=None, spatial_order=1):
@@ -364,61 +382,37 @@ class TheoryInterpolator:
         if spatial_order not in (1, 3):
             raise ValueError('spatial_order must be 1 (linear) or 3 (cubic)')
         self.spatial_order = spatial_order
-        self.interps_linear = {}
-        self.interps_cubic = {}
-        ueep = np.arange(self.neep).astype(float)
-        
-        # We build a mask interpolator to handle NaN poisoning at boundaries correctly
-        # Linear interpolation with mask avoids 0 * NaN = NaN issue
-        mask = np.isfinite(self.logage_grid).astype(float)
-        self.mask_interp = scipy.interpolate.RegularGridInterpolator(
-            (self.ufeh, self.umass, ueep), mask, method='linear', bounds_error=False, fill_value=0.0)
 
-        for k, grid in zip(['logg', 'logl', 'logteff', 'logage', 'phase'],
-                           [self.logg_grid, self.logl_grid, self.logteff_grid, self.logage_grid, self.phase_grid]):
-            # Replace NaNs with 0.0 to avoid poisoning. 
-            # The mask_interp will be used to recover the true interpolated value.
-            grid_no_nan = np.nan_to_num(grid, nan=0.0)
-            self.interps_linear[k] = scipy.interpolate.RegularGridInterpolator(
-                (self.ufeh, self.umass, ueep), grid_no_nan, method='linear', bounds_error=False, fill_value=0.0)
+    def _eval_linear_interp(self, grid, DD, ieep, subset=None):
+        if subset is None:
+            subset = slice(None)
+        return _interpolator(grid, DD['C11'][subset], DD['C12'][subset],
+                             DD['C21'][subset], DD['C22'][subset],
+                             DD['l1feh'][subset], DD['l2feh'][subset],
+                             DD['l1mass'][subset], DD['l2mass'][subset], ieep)
 
-            if spatial_order == 3 and k in ('logg', 'logl', 'logteff'):
-                # For cubic, we need a fully finite grid for spline construction.
-                grid_filled = grid.copy()
-                for i in range(grid_filled.shape[0]):
-                    for j in range(grid_filled.shape[2]):
-                        arr = grid_filled[i, :, j]
-                        xids = np.nonzero(np.isfinite(arr))[0]
-                        if len(xids) > 0:
-                            arr[:xids[0]] = arr[xids[0]]
-                            arr[xids[-1] + 1:] = arr[xids[-1]]
-                        else:
-                            arr[:] = 0
-                for i in range(grid_filled.shape[1]):
-                    for j in range(grid_filled.shape[2]):
-                        arr = grid_filled[:, i, j]
-                        xids = np.nonzero(np.isfinite(arr))[0]
-                        if len(xids) > 0:
-                            grid1d_filler(arr)
-                            arr[:xids[0]] = arr[xids[0]]
-                            arr[xids[-1] + 1:] = arr[xids[-1]]
-                        else:
-                            arr[:] = 0
-                self.interps_cubic[k] = scipy.interpolate.RegularGridInterpolator(
-                    (self.ufeh, self.umass, ueep), grid_filled, method='cubic', bounds_error=False, fill_value=np.nan)
+    def _eval_spatial_interp(self, grid, DD, ieep, subset=None, use_cubic=False):
+        if subset is None:
+            subset = slice(None)
+        if not (use_cubic and self.spatial_order == 3):
+            return self._eval_linear_interp(grid, DD, ieep, subset=subset)
 
-    def _eval_interp(self, key, pts):
-        """ Evaluate interpolator handling NaN poisoning via mask """
-        # Keep age interpolation monotonic-safe regardless of spatial mode.
-        # This preserves the binary-search invariants in age->EEP conversion.
-        if self.spatial_order == 3 and key in self.interps_cubic:
-            return self.interps_cubic[key](pts)
+        wf = DD['wf'][subset]
+        ifehs = DD['ifehs'][subset]
+        wm = DD['wm'][subset]
+        imasses = DD['imasses'][subset]
+        ieep = np.asarray(ieep, dtype=int)
 
-        vals = self.interps_linear[key](pts)
-        masks = self.mask_interp(pts)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            res = vals / masks
-        res[masks < 1e-10] = np.nan # Truly out of any valid corner
+        res = utils._interpolator_bicubic(grid, wf, ifehs, wm, imasses, ieep)
+        bad = np.zeros(len(res), dtype=bool)
+        for i in range(4):
+            for j in range(4):
+                bad |= ~np.isfinite(grid[ifehs[:, i], imasses[:, j], ieep])
+        if bad.any():
+            bad_idx = np.nonzero(bad)[0]
+            local = np.arange(len(res))
+            res[bad] = self._eval_linear_interp(grid, DD, ieep[bad_idx],
+                                                subset=local[bad])
         return res
 
     def __call__(self, mass, logage, feh):
@@ -434,28 +428,41 @@ class TheoryInterpolator:
         eep1, eep2, eep_frac, bad = (DD['eep1'], DD['eep2'], DD['eep_frac'],
                                      DD['bad'])
         good = ~bad
-        eep1_good, eep2_good, eep_frac_good = [
-            _[good] for _ in [eep1, eep2, eep_frac]
-        ]
-        
         xret = {}
         if good.any():
+            good_idx = np.nonzero(good)[0]
+            eep1_good, eep2_good, eep_frac_good = [
+                _[good] for _ in [eep1, eep2, eep_frac]
+            ]
             eep_m1_good = np.clip(eep1_good - 1, 0, self.neep - 1).astype(float)
             eep_0_good = eep1_good.astype(float)
             eep_1_good = eep2_good.astype(float)
             eep_2_good = np.clip(eep2_good + 1, 0, self.neep - 1).astype(float)
 
-            feh_good = feh[good]
-            mass_good = mass[good]
-            
-            for curkey in ['logg', 'logteff', 'logl', 'phase']:
+            for curkey, curarr in [('logg', self.logg_grid),
+                                   ('logteff', self.logteff_grid),
+                                   ('logl', self.logl_grid)]:
                 curr = [
-                    self._eval_interp(curkey, np.stack([feh_good, mass_good, eep_m1_good], axis=1)),
-                    self._eval_interp(curkey, np.stack([feh_good, mass_good, eep_0_good], axis=1)),
-                    self._eval_interp(curkey, np.stack([feh_good, mass_good, eep_1_good], axis=1)),
-                    self._eval_interp(curkey, np.stack([feh_good, mass_good, eep_2_good], axis=1))
+                    self._eval_spatial_interp(curarr, DD, eep_m1_good,
+                                              subset=good_idx, use_cubic=True),
+                    self._eval_spatial_interp(curarr, DD, eep_0_good,
+                                              subset=good_idx, use_cubic=True),
+                    self._eval_spatial_interp(curarr, DD, eep_1_good,
+                                              subset=good_idx, use_cubic=True),
+                    self._eval_spatial_interp(curarr, DD, eep_2_good,
+                                              subset=good_idx, use_cubic=True)
                 ]
-                xret[curkey] = utils.steffen_interp(curr[0], curr[1], curr[2], curr[3], eep_frac_good)
+                xret[curkey] = utils.steffen_interp(curr[0], curr[1], curr[2],
+                                                    curr[3], eep_frac_good)
+
+            # Keep phase interpolation linear to avoid cubic overshoot
+            phase0 = self._eval_linear_interp(self.phase_grid, DD,
+                                              eep1_good.astype(int),
+                                              subset=good_idx)
+            phase1 = self._eval_linear_interp(self.phase_grid, DD,
+                                              eep2_good.astype(int),
+                                              subset=good_idx)
+            xret['phase'] = phase0 + eep_frac_good * (phase1 - phase0)
 
         ret = {}
         for k in ['logg', 'logteff', 'logl', 'phase']:
@@ -495,19 +502,46 @@ class TheoryInterpolator:
 
         goodsel = ~bad
 
-        ret_logage = np.zeros_like(mass)
-        jac = np.zeros_like(mass)
+        C11, C12, C21, C22 = _get_polylin_coeff(feh, self.ufeh, mass,
+                                                self.umass, l1feh, l2feh,
+                                                l1mass, l2mass)
+        wf = ifehs = wm = imasses = None
+        if self.spatial_order == 3:
+            wf, ifehs = utils._get_cubic_coeffs(feh, self.ufeh, l1feh)
+            wm, imasses = utils._get_cubic_coeffs(mass, self.umass, l1mass)
+
+        ret_logage = np.zeros_like(mass) + np.nan
+        jac = np.zeros_like(mass) + np.nan
         if goodsel.any():
-            feh_good = feh[goodsel]
-            mass_good = mass[goodsel]
-            
             eep_m1 = np.clip(eep1[goodsel] - 1, 0, neep - 1).astype(float)
             eep_0 = eep1[goodsel].astype(float)
             eep_1 = eep2[goodsel].astype(float)
             eep_2 = np.clip(eep2[goodsel] + 1, 0, neep - 1).astype(float)
 
             def getAge(cureep_vec):
-                return self._eval_interp('logage', np.stack([feh_good, mass_good, cureep_vec], axis=1))
+                if self.spatial_order == 3:
+                    ieep = np.asarray(cureep_vec, dtype=int)
+                    res = utils._interpolator_bicubic(
+                        self.logage_grid, wf[goodsel], ifehs[goodsel],
+                        wm[goodsel], imasses[goodsel], ieep)
+                    bad = np.zeros(len(res), dtype=bool)
+                    for i in range(4):
+                        for j in range(4):
+                            bad |= ~np.isfinite(
+                                self.logage_grid[ifehs[goodsel, i],
+                                                 imasses[goodsel, j], ieep])
+                    if bad.any():
+                        res[bad] = _interpolator(
+                            self.logage_grid, C11[goodsel][bad],
+                            C12[goodsel][bad], C21[goodsel][bad],
+                            C22[goodsel][bad], l1feh[goodsel][bad],
+                            l2feh[goodsel][bad], l1mass[goodsel][bad],
+                            l2mass[goodsel][bad], np.asarray(cureep_vec)[bad])
+                    return res
+                return _interpolator(self.logage_grid, C11[goodsel], C12[goodsel],
+                                     C21[goodsel], C22[goodsel], l1feh[goodsel],
+                                     l2feh[goodsel], l1mass[goodsel],
+                                     l2mass[goodsel], cureep_vec)
 
             logage_m1 = getAge(eep_m1)
             logage_0 = getAge(eep_0)
@@ -533,10 +567,9 @@ class TheoryInterpolator:
             ix = (i1 + i2) // 2
             if (i2 - i1) == 1:
                 stop = True
-            R = self._get_eep_coeffs(self.umass[ix], logage, feh)
-            eep = R['eep1']
-            bad = R['bad'][0]
-            phase = self._eval_interp('phase', np.array([[feh, self.umass[ix], float(eep[0])]]))[0]
+            res = self(self.umass[ix], logage, feh)
+            phase = res['phase'][0]
+            bad = np.isnan(phase)
             if phase > 0.5 or bad:
                 i2 = ix
             else:
@@ -559,26 +592,54 @@ class TheoryInterpolator:
             Maximum mass on the isochrone
         """
         logage, feh = np.float64(logage), np.float64(feh)
-        niter = 60
+        niter = 40
+        im1 = 0
+        im2 = len(self.umass) - 1
         l1feh = np.searchsorted(self.ufeh, feh) - 1
-        valid = np.array([
-            self._isvalid(curm, logage, feh, l1feh=l1feh) for curm in self.umass
-        ])
-        if not valid.any():
-            return np.nan
-        im1 = np.nonzero(valid)[0][-1]
-        if im1 == len(self.umass) - 1:
-            return self.umass[im1]
-        im2 = im1 + 1
-
-        m1, m2 = np.float64(self.umass[im1]), np.float64(self.umass[im2])
+        if self._isvalid(self.umass[im2], logage, feh, l1feh=l1feh):
+            return self.umass[im2]
         for _ in range(niter):
-            mm = 0.5 * (m1 + m2)
-            if self._isvalid(mm, logage, feh, l1feh=l1feh):
-                m1 = mm
+            curm = (im1 + im2) // 2
+            good = self._isvalid(self.umass[curm], logage, feh, l1feh=l1feh)
+            if not good:
+                im1, im2 = im1, curm
             else:
-                m2 = mm
-        return m1 * (1 - 1e-12)
+                im1, im2 = curm, im2
+            if im2 - im1 == 1:
+                break
+
+        lo = self.umass[im1]
+        hi = self.umass[im2]
+
+        def _isfinite_mass(m):
+            return np.isfinite(self(m, logage, feh)['logl'][0])
+
+        if not _isfinite_mass(lo):
+            idx = im1
+            while idx > 0 and not _isfinite_mass(self.umass[idx]):
+                idx -= 1
+            lo = self.umass[idx]
+            hi = self.umass[min(idx + 1, len(self.umass) - 1)]
+        elif _isfinite_mass(hi):
+            idx = im2
+            while idx + 1 < len(self.umass) and _isfinite_mass(
+                    self.umass[idx + 1]):
+                idx += 1
+            if idx + 1 >= len(self.umass):
+                return self.umass[idx]
+            lo = self.umass[idx]
+            hi = self.umass[idx + 1]
+
+        tol = 1e-7
+        for _ in range(64):
+            mid = 0.5 * (lo + hi)
+            if _isfinite_mass(mid):
+                lo = mid
+            else:
+                hi = mid
+            if (hi - lo) < tol:
+                break
+        return lo * (1 - 1e-10)
 
     def _get_eep_coeffs(self, mass, logage, feh):
         """
@@ -604,10 +665,40 @@ The interpolation is done in two stages:
         l1feh[bads] = 0
         l2feh[bads] = 1
 
+        C11, C12, C21, C22 = _get_polylin_coeff(feh, self.ufeh, mass,
+                                                self.umass, l1feh, l2feh,
+                                                l1mass, l2mass)
+
+        wf = ifehs = wm = imasses = None
+        if self.spatial_order == 3:
+            wf, ifehs = utils._get_cubic_coeffs(feh, self.ufeh, l1feh)
+            wm, imasses = utils._get_cubic_coeffs(mass, self.umass, l1mass)
+
         def getAge(cureep_vec, subset):
             if np.isscalar(cureep_vec):
                 cureep_vec = np.full(len(subset), float(cureep_vec))
-            return self._eval_interp('logage', np.stack([feh[subset], mass[subset], cureep_vec], axis=1))
+            if self.spatial_order == 3:
+                ieep = np.asarray(cureep_vec, dtype=int)
+                res = utils._interpolator_bicubic(self.logage_grid, wf[subset],
+                                                  ifehs[subset], wm[subset],
+                                                  imasses[subset], ieep)
+                bad = np.zeros(len(res), dtype=bool)
+                for i in range(4):
+                    for j in range(4):
+                        bad |= ~np.isfinite(
+                            self.logage_grid[ifehs[subset, i],
+                                             imasses[subset, j], ieep])
+                if bad.any():
+                    res[bad] = _interpolator(
+                        self.logage_grid, C11[subset][bad], C12[subset][bad],
+                        C21[subset][bad], C22[subset][bad], l1feh[subset][bad],
+                        l2feh[subset][bad], l1mass[subset][bad],
+                        l2mass[subset][bad], ieep[bad])
+                return res
+            return _interpolator(self.logage_grid, C11[subset], C12[subset],
+                                 C21[subset], C22[subset], l1feh[subset],
+                                 l2feh[subset], l1mass[subset], l2mass[subset],
+                                 cureep_vec)
 
         lefts, rights, bads = _binary_search(bads, logage, self.neep, getAge)
         eep_frac = np.zeros(len(mass))
@@ -627,7 +718,11 @@ The interpolation is done in two stages:
 
             eep_frac[good] = utils.solve_steffen_t(y_m1, y_0, y_1, y_2, logage[good])
         
-        return dict(eep_frac=eep_frac,
+        ret = dict(C11=C11,
+                    C12=C12,
+                    C21=C21,
+                    C22=C22,
+                    eep_frac=eep_frac,
                     bad=bads,
                     l1feh=l1feh,
                     l2feh=l2feh,
@@ -635,6 +730,9 @@ The interpolation is done in two stages:
                     l2mass=l2mass,
                     eep1=lefts,
                     eep2=rights)
+        if self.spatial_order == 3:
+            ret.update(dict(wf=wf, ifehs=ifehs, wm=wm, imasses=imasses))
+        return ret
 
     def _isvalid(self, mass, logage, feh, l1feh=None):
         """
@@ -652,11 +750,39 @@ The interpolation is done in two stages:
         if ((l2mass >= len(self.umass)) or (l2feh >= len(self.ufeh))
                 or (l1mass < 0) or (l1feh < 0)):
             return False
-        
+        C11, C12, C21, C22 = _get_polylin_coeff(np.array([feh]), self.ufeh,
+                                                np.array([mass]), self.umass,
+                                                np.array([l1feh]),
+                                                np.array([l2feh]),
+                                                np.array([l1mass]),
+                                                np.array([l2mass]))
+        if self.spatial_order == 3:
+            wf, ifehs = utils._get_cubic_coeffs(np.array([feh]), self.ufeh,
+                                                np.array([l1feh]))
+            wm, imasses = utils._get_cubic_coeffs(np.array([mass]), self.umass,
+                                                  np.array([l1mass]))
         i1, i2 = 0, self.neep - 1
 
         def getAge(cureep):
-            return self._eval_interp('logage', np.array([[feh, mass, float(cureep)]]))[0]
+            ieep = np.array([cureep], dtype=int)
+            if self.spatial_order == 3:
+                val = utils._interpolator_bicubic(self.logage_grid, wf, ifehs,
+                                                  wm, imasses, ieep)[0]
+                for i in range(4):
+                    for j in range(4):
+                        if not np.isfinite(
+                                self.logage_grid[ifehs[0, i], imasses[0, j],
+                                                 ieep[0]]):
+                            return _interpolator(
+                                self.logage_grid, C11, C12, C21, C22,
+                                np.array([l1feh]), np.array([l2feh]),
+                                np.array([l1mass]), np.array([l2mass]),
+                                ieep)[0]
+                return val
+            return _interpolator(self.logage_grid, C11, C12, C21, C22,
+                                 np.array([l1feh]), np.array([l2feh]),
+                                 np.array([l1mass]), np.array([l2mass]),
+                                 ieep)[0]
 
         # check invariants on edges
         if not getAge(i1) <= logage:

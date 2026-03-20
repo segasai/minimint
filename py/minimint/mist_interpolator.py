@@ -333,22 +333,9 @@ def _binary_search(bads, logage, neep, getAge):
     return lefts, rights, bads
 
 
-def _get_polylin_coeff(feh, ufeh, mass, umass, feh_ind1, feh_ind2, mass_ind1,
-                       mass_ind2):
-    x = (feh - ufeh[feh_ind1]) / (ufeh[feh_ind2] - ufeh[feh_ind1])
-    y = (mass - umass[mass_ind1]) / (umass[mass_ind2] - umass[mass_ind1])
-    C11 = (1 - x) * (1 - y)
-    C12 = (1 - x) * y
-    C21 = x * (1 - y)
-    C22 = x * y
-    return C11, C12, C21, C22
-
-
-def _interpolator(grid, C11, C12, C21, C22, ifeh1, ifeh2, imass1, imass2,
-                  ieep):
+def _interpolator(grid, wfeh, ifehs, wmass, imasses, ieep):
     ieep = np.asarray(ieep, dtype=int)
-    return (C11 * grid[ifeh1, imass1, ieep] + C12 * grid[ifeh1, imass2, ieep] +
-            C21 * grid[ifeh2, imass1, ieep] + C22 * grid[ifeh2, imass2, ieep])
+    return utils._interpolator_2d(grid, wfeh, ifehs, wmass, imasses, ieep)
 
 
 class TheoryInterpolator:
@@ -386,10 +373,8 @@ class TheoryInterpolator:
     def _eval_linear_interp(self, grid, DD, ieep, subset=None):
         if subset is None:
             subset = slice(None)
-        return _interpolator(grid, DD['C11'][subset], DD['C12'][subset],
-                             DD['C21'][subset], DD['C22'][subset],
-                             DD['l1feh'][subset], DD['l2feh'][subset],
-                             DD['l1mass'][subset], DD['l2mass'][subset], ieep)
+        return _interpolator(grid, DD['wfeh_lin'][subset], DD['ifehs_lin'][subset],
+                             DD['wmass_lin'][subset], DD['imasses_lin'][subset], ieep)
 
     def _eval_spatial_interp(self, grid, DD, ieep, subset=None, use_cubic=False):
         if subset is None:
@@ -502,9 +487,9 @@ class TheoryInterpolator:
 
         goodsel = ~bad
 
-        C11, C12, C21, C22 = _get_polylin_coeff(feh, self.ufeh, mass,
-                                                self.umass, l1feh, l2feh,
-                                                l1mass, l2mass)
+        wfeh_lin, ifehs_lin = utils._get_linear_coeffs(feh, self.ufeh, l1feh)
+        wmass_lin, imasses_lin = utils._get_linear_coeffs(mass, self.umass,
+                                                          l1mass)
         wf = ifehs = wm = imasses = None
         if self.spatial_order == 3:
             wf, ifehs = utils._get_cubic_coeffs(feh, self.ufeh, l1feh)
@@ -532,16 +517,15 @@ class TheoryInterpolator:
                                                  imasses[goodsel, j], ieep])
                     if bad.any():
                         res[bad] = _interpolator(
-                            self.logage_grid, C11[goodsel][bad],
-                            C12[goodsel][bad], C21[goodsel][bad],
-                            C22[goodsel][bad], l1feh[goodsel][bad],
-                            l2feh[goodsel][bad], l1mass[goodsel][bad],
-                            l2mass[goodsel][bad], np.asarray(cureep_vec)[bad])
+                            self.logage_grid, wfeh_lin[goodsel][bad],
+                            ifehs_lin[goodsel][bad],
+                            wmass_lin[goodsel][bad],
+                            imasses_lin[goodsel][bad],
+                            np.asarray(cureep_vec)[bad])
                     return res
-                return _interpolator(self.logage_grid, C11[goodsel], C12[goodsel],
-                                     C21[goodsel], C22[goodsel], l1feh[goodsel],
-                                     l2feh[goodsel], l1mass[goodsel],
-                                     l2mass[goodsel], cureep_vec)
+                return _interpolator(self.logage_grid, wfeh_lin[goodsel],
+                                     ifehs_lin[goodsel], wmass_lin[goodsel],
+                                     imasses_lin[goodsel], cureep_vec)
 
             logage_m1 = getAge(eep_m1)
             logage_0 = getAge(eep_0)
@@ -643,10 +627,10 @@ class TheoryInterpolator:
 
     def _get_eep_coeffs(self, mass, logage, feh):
         """
-        This function gets all the necessary coefficients for the interpolation
+        This function gets all coefficients for interpolation.
 The interpolation is done in two stages:
-1) Bilinear integration over mass, feh with coefficients C11,C12,C21,C22
-2) Then there is a final interpolation over EEP axis
+1) Spatial interpolation over (mass, feh) using axis weights
+2) Final interpolation over EEP axis
 """
         feh, mass, logage = [
             np.atleast_1d(np.asarray(_, dtype=np.float64))
@@ -665,9 +649,9 @@ The interpolation is done in two stages:
         l1feh[bads] = 0
         l2feh[bads] = 1
 
-        C11, C12, C21, C22 = _get_polylin_coeff(feh, self.ufeh, mass,
-                                                self.umass, l1feh, l2feh,
-                                                l1mass, l2mass)
+        wfeh_lin, ifehs_lin = utils._get_linear_coeffs(feh, self.ufeh, l1feh)
+        wmass_lin, imasses_lin = utils._get_linear_coeffs(mass, self.umass,
+                                                          l1mass)
 
         wf = ifehs = wm = imasses = None
         if self.spatial_order == 3:
@@ -690,15 +674,13 @@ The interpolation is done in two stages:
                                              imasses[subset, j], ieep])
                 if bad.any():
                     res[bad] = _interpolator(
-                        self.logage_grid, C11[subset][bad], C12[subset][bad],
-                        C21[subset][bad], C22[subset][bad], l1feh[subset][bad],
-                        l2feh[subset][bad], l1mass[subset][bad],
-                        l2mass[subset][bad], ieep[bad])
+                        self.logage_grid, wfeh_lin[subset][bad],
+                        ifehs_lin[subset][bad], wmass_lin[subset][bad],
+                        imasses_lin[subset][bad], ieep[bad])
                 return res
-            return _interpolator(self.logage_grid, C11[subset], C12[subset],
-                                 C21[subset], C22[subset], l1feh[subset],
-                                 l2feh[subset], l1mass[subset], l2mass[subset],
-                                 cureep_vec)
+            return _interpolator(self.logage_grid, wfeh_lin[subset],
+                                 ifehs_lin[subset], wmass_lin[subset],
+                                 imasses_lin[subset], cureep_vec)
 
         lefts, rights, bads = _binary_search(bads, logage, self.neep, getAge)
         eep_frac = np.zeros(len(mass))
@@ -718,10 +700,10 @@ The interpolation is done in two stages:
 
             eep_frac[good] = utils.solve_steffen_t(y_m1, y_0, y_1, y_2, logage[good])
         
-        ret = dict(C11=C11,
-                    C12=C12,
-                    C21=C21,
-                    C22=C22,
+        ret = dict(wfeh_lin=wfeh_lin,
+                    ifehs_lin=ifehs_lin,
+                    wmass_lin=wmass_lin,
+                    imasses_lin=imasses_lin,
                     eep_frac=eep_frac,
                     bad=bads,
                     l1feh=l1feh,
@@ -750,12 +732,12 @@ The interpolation is done in two stages:
         if ((l2mass >= len(self.umass)) or (l2feh >= len(self.ufeh))
                 or (l1mass < 0) or (l1feh < 0)):
             return False
-        C11, C12, C21, C22 = _get_polylin_coeff(np.array([feh]), self.ufeh,
-                                                np.array([mass]), self.umass,
-                                                np.array([l1feh]),
-                                                np.array([l2feh]),
-                                                np.array([l1mass]),
-                                                np.array([l2mass]))
+        wfeh_lin, ifehs_lin = utils._get_linear_coeffs(np.array([feh]),
+                                                       self.ufeh,
+                                                       np.array([l1feh]))
+        wmass_lin, imasses_lin = utils._get_linear_coeffs(np.array([mass]),
+                                                          self.umass,
+                                                          np.array([l1mass]))
         if self.spatial_order == 3:
             wf, ifehs = utils._get_cubic_coeffs(np.array([feh]), self.ufeh,
                                                 np.array([l1feh]))
@@ -774,15 +756,11 @@ The interpolation is done in two stages:
                                 self.logage_grid[ifehs[0, i], imasses[0, j],
                                                  ieep[0]]):
                             return _interpolator(
-                                self.logage_grid, C11, C12, C21, C22,
-                                np.array([l1feh]), np.array([l2feh]),
-                                np.array([l1mass]), np.array([l2mass]),
-                                ieep)[0]
+                                self.logage_grid, wfeh_lin, ifehs_lin,
+                                wmass_lin, imasses_lin, ieep)[0]
                 return val
-            return _interpolator(self.logage_grid, C11, C12, C21, C22,
-                                 np.array([l1feh]), np.array([l2feh]),
-                                 np.array([l1mass]), np.array([l2mass]),
-                                 ieep)[0]
+            return _interpolator(self.logage_grid, wfeh_lin, ifehs_lin,
+                                 wmass_lin, imasses_lin, ieep)[0]
 
         # check invariants on edges
         if not getAge(i1) <= logage:

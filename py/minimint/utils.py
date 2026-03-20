@@ -44,6 +44,105 @@ def tail_head(fin, nskip, nout):
     return fpout.name
 
 
+def _get_linear_coeffs(x, x_grid, j):
+    """
+    Get linear interpolation weights and indices for target x on x_grid.
+    j is the index such that x_grid[j] <= x < x_grid[j+1].
+    """
+    j1 = np.clip(j, 0, len(x_grid) - 2)
+    j2 = j1 + 1
+    x1 = x_grid[j1]
+    x2 = x_grid[j2]
+    dx = x2 - x1
+    dx_safe = np.where(dx > 0, dx, 1.0)
+    t = (x - x1) / dx_safe
+    w0 = 1.0 - t
+    w1 = t
+    return (np.stack([w0, w1], axis=-1), np.stack([j1, j2], axis=-1))
+
+
+def _get_axis_coeffs(x, x_grid, j, order):
+    """
+    Generic axis coefficient helper.
+    """
+    if order == 1:
+        return _get_linear_coeffs(x, x_grid, j)
+    if order == 3:
+        return _get_cubic_coeffs(x, x_grid, j)
+    raise ValueError("order must be 1 or 3")
+
+
+@njit(cache=True)
+def _interpolator_2d_numba(grid, w0, i0, w1, i1, ie):
+    n = w0.shape[0]
+    k0 = w0.shape[1]
+    k1 = w1.shape[1]
+    out = np.zeros(n, dtype=np.float64)
+    for t in range(n):
+        e = ie[t]
+        acc = 0.0
+        for a in range(k0):
+            wa = w0[t, a]
+            ia = i0[t, a]
+            for b in range(k1):
+                acc += wa * w1[t, b] * grid[ia, i1[t, b], e]
+        out[t] = acc
+    return out
+
+
+@njit(cache=True)
+def _interpolator_2d_numba_2x2(grid, w0, i0, w1, i1, ie):
+    n = w0.shape[0]
+    out = np.zeros(n, dtype=np.float64)
+    for t in range(n):
+        e = ie[t]
+        out[t] = (w0[t, 0] * w1[t, 0] * grid[i0[t, 0], i1[t, 0], e] +
+                  w0[t, 0] * w1[t, 1] * grid[i0[t, 0], i1[t, 1], e] +
+                  w0[t, 1] * w1[t, 0] * grid[i0[t, 1], i1[t, 0], e] +
+                  w0[t, 1] * w1[t, 1] * grid[i0[t, 1], i1[t, 1], e])
+    return out
+
+
+@njit(cache=True)
+def _interpolator_2d_numba_4x4(grid, w0, i0, w1, i1, ie):
+    n = w0.shape[0]
+    out = np.zeros(n, dtype=np.float64)
+    for t in range(n):
+        e = ie[t]
+        acc = 0.0
+        for a in range(4):
+            wa = w0[t, a]
+            ia = i0[t, a]
+            acc += wa * w1[t, 0] * grid[ia, i1[t, 0], e]
+            acc += wa * w1[t, 1] * grid[ia, i1[t, 1], e]
+            acc += wa * w1[t, 2] * grid[ia, i1[t, 2], e]
+            acc += wa * w1[t, 3] * grid[ia, i1[t, 3], e]
+        out[t] = acc
+    return out
+
+
+def _interpolator_2d(grid, w0, i0, w1, i1, ie):
+    """
+    Generic 2D tensor-product interpolation over first two grid axes
+    at fixed third-axis indices ie.
+    """
+    ie = np.asarray(ie, dtype=np.int64)
+    if HAS_NUMBA:
+        if w0.shape[1] == 4 and w1.shape[1] == 4:
+            return _interpolator_2d_numba_4x4(grid, w0, i0, w1, i1, ie)
+        if w0.shape[1] == 2 and w1.shape[1] == 2:
+            return _interpolator_2d_numba_2x2(grid, w0, i0, w1, i1, ie)
+        return _interpolator_2d_numba(grid, w0, i0, w1, i1, ie)
+    n = w0.shape[0]
+    out = np.zeros(n, dtype=np.float64)
+    for a in range(w0.shape[1]):
+        wa = w0[:, a]
+        ia = i0[:, a]
+        for b in range(w1.shape[1]):
+            out += wa * w1[:, b] * grid[ia, i1[:, b], ie]
+    return out
+
+
 def _get_cubic_coeffs(x, x_grid, j):
     """
     Get cubic interpolation weights and indices for target x on x_grid.
@@ -128,17 +227,7 @@ def _interpolator_bicubic(grid, wf, ifehs, wm, imasses, ieep):
     Perform bicubic interpolation over the first two dimensions
     (metallicity, mass) at fixed ieep.
     """
-    if HAS_NUMBA:
-        return _interpolator_bicubic_numba(grid, wf, ifehs, wm, imasses,
-                                           np.asarray(ieep, dtype=np.int64))
-    res = np.zeros(wf.shape[0], dtype=np.float64)
-    ieep = np.asarray(ieep, dtype=np.int64)
-    for i in range(4):
-        w_i = wf[:, i]
-        idx_i = ifehs[:, i]
-        for j in range(4):
-            res += w_i * wm[:, j] * grid[idx_i, imasses[:, j], ieep]
-    return res
+    return _interpolator_2d(grid, wf, ifehs, wm, imasses, ieep)
 
 
 def _interpolator_tricubic(grid, wf, ifehs, wm, imasses, we, ieeps):
@@ -162,22 +251,6 @@ def _interpolator_tricubic(grid, wf, ifehs, wm, imasses, we, ieeps):
 
 
 @njit(cache=True)
-def _interpolator_bicubic_numba(grid, wf, ifehs, wm, imasses, ieep):
-    n = wf.shape[0]
-    out = np.zeros(n, dtype=np.float64)
-    for t in range(n):
-        acc = 0.0
-        e = ieep[t]
-        for i in range(4):
-            wi = wf[t, i]
-            ii = ifehs[t, i]
-            for j in range(4):
-                acc += wi * wm[t, j] * grid[ii, imasses[t, j], e]
-        out[t] = acc
-    return out
-
-
-@njit(cache=True)
 def _interpolator_tricubic_numba(grid, wf, ifehs, wm, imasses, we, ieeps):
     n = wf.shape[0]
     out = np.zeros(n, dtype=np.float64)
@@ -192,6 +265,53 @@ def _interpolator_tricubic_numba(grid, wf, ifehs, wm, imasses, we, ieeps):
                 for k in range(4):
                     acc += wij * we[t, k] * grid[ii, jj, ieeps[t, k]]
         out[t] = acc
+    return out
+
+
+@njit(cache=True)
+def _interpolator_4d_numba(grid, w0, i0, w1, i1, w2, i2, w3, i3):
+    n = w0.shape[0]
+    k0 = w0.shape[1]
+    k1 = w1.shape[1]
+    k2 = w2.shape[1]
+    k3 = w3.shape[1]
+    out = np.zeros(n, dtype=np.float64)
+    for t in range(n):
+        acc = 0.0
+        for a in range(k0):
+            wa = w0[t, a]
+            ia = i0[t, a]
+            for b in range(k1):
+                wab = wa * w1[t, b]
+                ib = i1[t, b]
+                for c in range(k2):
+                    wabc = wab * w2[t, c]
+                    ic = i2[t, c]
+                    for d in range(k3):
+                        acc += wabc * w3[t, d] * grid[ia, ib, ic, i3[t, d]]
+        out[t] = acc
+    return out
+
+
+def _interpolator_4d(grid, w0, i0, w1, i1, w2, i2, w3, i3):
+    """
+    Generic 4D tensor-product interpolation.
+    """
+    if HAS_NUMBA:
+        return _interpolator_4d_numba(grid, w0, i0, w1, i1, w2, i2, w3, i3)
+    n = w0.shape[0]
+    out = np.zeros(n, dtype=np.float64)
+    for a in range(w0.shape[1]):
+        wa = w0[:, a]
+        ia = i0[:, a]
+        for b in range(w1.shape[1]):
+            wab = wa * w1[:, b]
+            ib = i1[:, b]
+            for c in range(w2.shape[1]):
+                wabc = wab * w2[:, c]
+                ic = i2[:, c]
+                for d in range(w3.shape[1]):
+                    out += wabc * w3[:, d] * grid[ia, ib, ic, i3[:, d]]
     return out
 
 

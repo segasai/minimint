@@ -14,6 +14,8 @@ except Exception:  # pragma: no cover - fallback path
             return func
         return _wrap
 
+DEFAULT_MIST_VERSION = '1.2'
+
 
 def get_data_path():
     path = os.environ.get('MINIMINT_DATA_PATH')
@@ -21,6 +23,27 @@ def get_data_path():
         return path
     path = os.path.join(str(pathlib.Path(__file__).parent.absolute()), 'data')
     os.makedirs(path, exist_ok=True)
+    return path
+
+
+def normalize_mist_version(mist_version=None):
+    if mist_version is None:
+        return DEFAULT_MIST_VERSION
+    return str(mist_version).lstrip('v')
+
+
+def get_data_path_for_grid(mist_version=DEFAULT_MIST_VERSION,
+                           vvcrit=0.4,
+                           create=True):
+    """
+    Return a dataset path for a given MIST version and vvcrit.
+    """
+    mist_version = normalize_mist_version(mist_version)
+    vvcrit = float(vvcrit)
+    base = get_data_path()
+    path = os.path.join(base, f'mist_v{mist_version}', f'vvcrit{vvcrit:.1f}')
+    if create:
+        os.makedirs(path, exist_ok=True)
     return path
 
 

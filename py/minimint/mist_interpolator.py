@@ -4,7 +4,6 @@ import glob
 import os
 import gc
 import subprocess
-import pickle
 import urllib.request
 import astropy.table as atpy
 import scipy.interpolate
@@ -32,14 +31,25 @@ Typically throughout the code the metallicity is the first axis
 and mass is the second axis
 """
 
-TRACKS_FILE = 'tracks.fits'
-
-
 def get_file(gridt):
     return '%s_grid.npy' % (gridt)
 
 
-INTERP_PKL = 'interp.pkl'
+INTERP_NPZ = 'interp.npz'
+VALID_EEP_MAX_NPY = 'valid_eep_max.npy'
+
+
+def get_interp_ready_file(gridt):
+    return f'{gridt}_interp_grid.npy'
+
+
+def _require_supported_mist_version(mist_version):
+    mist_version = utils.normalize_mist_version(mist_version)
+    if mist_version != '1.2':
+        raise ValueError(
+            f'Only MIST v1.2 is supported in this release, got: {mist_version}'
+        )
+    return mist_version
 
 
 def getheader(f):
@@ -62,7 +72,7 @@ def getheader(f):
     return D
 
 
-def read_grid(eep_prefix, outp_prefix):
+def read_grid(eep_prefix):
     mask = os.path.join(eep_prefix, '*EEPS', '*eep')
     fs = glob.glob(mask)
     if len(fs) == 0:
@@ -96,8 +106,7 @@ def read_grid(eep_prefix, outp_prefix):
         ]:
             tabs.remove_column(k)
 
-    os.makedirs(outp_prefix, exist_ok=True)
-    tabs.write(os.path.join(outp_prefix, TRACKS_FILE), overwrite=True)
+    return tabs
 
 
 def grid3d_filler(ima):
@@ -131,6 +140,33 @@ def grid1d_filler(arr):
                                                         k=1)(xids1[mask])
 
 
+def build_interp_ready_grid(grid):
+    """
+    Prepare a finite grid for cubic interpolation.
+    """
+    grid_filled = np.array(grid, copy=True)
+    for i in range(grid_filled.shape[0]):
+        for j in range(grid_filled.shape[2]):
+            arr = grid_filled[i, :, j]
+            xids = np.nonzero(np.isfinite(arr))[0]
+            if len(xids) > 0:
+                arr[:xids[0]] = arr[xids[0]]
+                arr[xids[-1] + 1:] = arr[xids[-1]]
+            else:
+                arr[:] = 0
+    for i in range(grid_filled.shape[1]):
+        for j in range(grid_filled.shape[2]):
+            arr = grid_filled[:, i, j]
+            xids = np.nonzero(np.isfinite(arr))[0]
+            if len(xids) > 0:
+                grid1d_filler(arr)
+                arr[:xids[0]] = arr[xids[0]]
+                arr[xids[-1] + 1:] = arr[xids[-1]]
+            else:
+                arr[:] = 0
+    return grid_filled
+
+
 def __bc_url(x):
     return 'https://waps.cfa.harvard.edu/MIST/BC_tables/%s.txz' % x
 
@@ -146,7 +182,8 @@ def download_and_prepare(filters=[
 ],
                          outp_prefix=None,
                          tmp_prefix=None,
-                         vvcrit=0.4):
+                         vvcrit=0.4,
+                         mist_version='1.2'):
     """ Download the MIST isochrones and prepare the prerocessed isochrones
     Parameters
 
@@ -160,7 +197,10 @@ def download_and_prepare(filters=[
     vvcrit: float
         The value of V/Vcrit for the isochrones. The default value is 0.4, but
         you can also use the value of 0
+    mist_version: str
+        MIST version. This release supports only v1.2.
     """
+    _require_supported_mist_version(mist_version)
 
     mets = ('m4.00,m3.50,m3.00,m2.50,m2.00,m1.75,m1.50,m1.25,' +
             'm1.00,m0.75,m0.50,m0.25,p0.00,p0.25,p0.50').split(',')
@@ -193,14 +233,21 @@ def download_and_prepare(filters=[
             writer(__bc_url(curfilt), T)
         for curmet in mets:
             writer(__eep_url(curmet, vvcrit=vvcrit), T)
-        prepare(T, T, outp_prefix=outp_prefix, filters=filters)
+        prepare(T,
+                T,
+                outp_prefix=outp_prefix,
+                filters=filters,
+                vvcrit=vvcrit,
+                mist_version=mist_version)
 
 
 def prepare(eep_prefix,
             bolom_prefix,
             outp_prefix=None,
             filters=('DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper',
-                     'UBVRIplus', 'WISE')):
+                     'UBVRIplus', 'WISE'),
+            vvcrit=0.4,
+            mist_version='1.2'):
     """
     Prepare the isochrone files
 
@@ -211,26 +258,29 @@ def prepare(eep_prefix,
     bolom_prefix: string
         The path that has bolometric correction files *DECam *UBRI etc
     """
+    mist_version = _require_supported_mist_version(mist_version)
     if outp_prefix is None:
-        outp_prefix = utils.get_data_path()
+        outp_prefix = utils.get_data_path_for_grid(mist_version=mist_version,
+                                                   vvcrit=vvcrit)
+    else:
+        os.makedirs(outp_prefix, exist_ok=True)
     print('Reading EEP grid')
     if not os.path.isdir(eep_prefix) or not os.path.isdir(outp_prefix):
         raise RuntimeError(
             'The arguments must be paths to the directories with EEP \
             and bolometric corrections')
-    read_grid(eep_prefix, outp_prefix)
+    tab = read_grid(eep_prefix)
     print('Processing EEPs')
-    tab = atpy.Table().read(os.path.join(outp_prefix, TRACKS_FILE))
-    os.unlink(os.path.join(outp_prefix, TRACKS_FILE))  # remove after reading
 
     umass, mass_id = np.unique(np.array(tab['initial_mass']),
                                return_inverse=True)
     ufeh, feh_id = np.unique(np.array(tab['feh']), return_inverse=True)
 
-    neep = 1710
+    neep = int(np.max(np.asarray(tab['EEP'], dtype=np.int64))) + 1
     nfeh = len(ufeh)
     nmass = len(umass)
     grids = ['logage', 'logteff', 'logg', 'logl', 'phase']
+    grid_store = {}
     for k in grids:
         grid = np.zeros((nfeh, nmass, neep)) - np.nan
         if k == 'logage':
@@ -255,10 +305,22 @@ def prepare(eep_prefix,
         if k == 'logage':
             grid[:, :, :] = np.cumsum(grid, axis=2)
 
+        grid_store[k] = grid
         np.save(os.path.join(outp_prefix, get_file(k)), grid)
 
-    with open(os.path.join(outp_prefix, INTERP_PKL), 'wb') as fp:
-        pickle.dump(dict(umass=umass, ufeh=ufeh, neep=neep), fp)
+    valid_eep_max = np.max(np.where(np.isfinite(grid_store['logage']),
+                                    np.arange(neep)[None, None, :], -1),
+                           axis=2).astype(np.int16)
+    np.save(os.path.join(outp_prefix, VALID_EEP_MAX_NPY), valid_eep_max)
+    for k in ('logg', 'logl', 'logteff'):
+        np.save(os.path.join(outp_prefix, get_interp_ready_file(k)),
+                build_interp_ready_grid(grid_store[k]))
+    np.savez(os.path.join(outp_prefix, INTERP_NPZ),
+             umass=umass,
+             ufeh=ufeh,
+             neep=neep,
+             mist_version=mist_version,
+             vvcrit=np.float64(vvcrit))
     print('Reading/processing bolometric corrections')
     bolom.prepare(bolom_prefix, outp_prefix, filters)
 
@@ -340,7 +402,11 @@ def _interpolator(grid, wfeh, ifehs, wmass, imasses, ieep):
 
 class TheoryInterpolator:
 
-    def __init__(self, prefix=None, spatial_order=1):
+    def __init__(self,
+                 prefix=None,
+                 spatial_order=1,
+                 mist_version='1.2',
+                 vvcrit=0.4):
         """
         Construct the interpolator that computes theoretical
         quantities (logg, logl, logteff) given (mass, logage, feh)
@@ -351,20 +417,38 @@ class TheoryInterpolator:
             Path to the data folder
         spatial_order: int
             Order of spatial interpolation (1 for linear, 3 for cubic)
+        mist_version: str
+            MIST version. This release supports only v1.2.
+        vvcrit: float
+            The value of V/Vcrit used for prepared data selection.
         """
+        mist_version = _require_supported_mist_version(mist_version)
         if prefix is None:
-            prefix = utils.get_data_path()
+            prefix = utils.get_data_path_for_grid(mist_version=mist_version,
+                                                  vvcrit=vvcrit,
+                                                  create=False)
         (self.logg_grid, self.logl_grid, self.logteff_grid, self.logage_grid,
          self.phase_grid) = [
              np.load(os.path.join(prefix, get_file(curt)))
              for curt in ['logg', 'logl', 'logteff', 'logage', 'phase']
          ]
-
-        with open(os.path.join(prefix, INTERP_PKL), 'rb') as fp:
-            D = pickle.load(fp)
-            self.umass = np.array(D['umass'])
-            self.ufeh = np.array(D['ufeh'])
-            self.neep = D['neep']
+        meta_path = os.path.join(prefix, INTERP_NPZ)
+        if not os.path.exists(meta_path):
+            raise RuntimeError(
+                f'Metadata file {INTERP_NPZ} not found in {prefix}. '
+                'Please re-run minimint.download_and_prepare(...)')
+        with np.load(meta_path) as meta:
+            self.umass = np.array(meta['umass'])
+            self.ufeh = np.array(meta['ufeh'])
+            self.neep = int(meta['neep'])
+            self.mist_version = str(meta.get('mist_version', mist_version))
+            self.vvcrit = float(meta.get('vvcrit', vvcrit))
+        valid_eep_path = os.path.join(prefix, VALID_EEP_MAX_NPY)
+        if not os.path.exists(valid_eep_path):
+            raise RuntimeError(
+                f'Validity file {VALID_EEP_MAX_NPY} not found in {prefix}. '
+                'Please re-run minimint.download_and_prepare(...)')
+        self.valid_eep_max = np.load(valid_eep_path)
             
         if spatial_order not in (1, 3):
             raise ValueError('spatial_order must be 1 (linear) or 3 (cubic)')
@@ -466,7 +550,7 @@ class TheoryInterpolator:
             np.atleast_1d(np.asarray(_, dtype=np.float64))
             for _ in [feh, mass, eep]
         ]
-        neep = 1710
+        neep = self.neep
         N = len(feh)
         l1feh = np.searchsorted(self.ufeh, feh) - 1
         l2feh = l1feh + 1
@@ -743,7 +827,12 @@ The interpolation is done in two stages:
                                                 np.array([l1feh]))
             wm, imasses = utils._get_cubic_coeffs(np.array([mass]), self.umass,
                                                   np.array([l1mass]))
-        i1, i2 = 0, self.neep - 1
+        i1 = 0
+        i2 = int(
+            np.min(self.valid_eep_max[[l1feh, l1feh, l2feh, l2feh],
+                                      [l1mass, l2mass, l1mass, l2mass]]))
+        if i2 < 1:
+            return False
 
         def getAge(cureep):
             ieep = np.array([cureep], dtype=int)
@@ -818,7 +907,12 @@ The interpolation is done in two stages:
 
 class Interpolator:
 
-    def __init__(self, filts, data_prefix=None, spatial_order=1):
+    def __init__(self,
+                 filts,
+                 data_prefix=None,
+                 spatial_order=1,
+                 mist_version='1.2',
+                 vvcrit=0.4):
         """
         Initialize the interpolator class, specifying filter names
         and optionally the folder where the preprocessed isochrones lie
@@ -831,10 +925,19 @@ class Interpolator:
             String for the data
         spatial_order: int
             Order of spatial interpolation (1 for linear, 3 for cubic)
+        mist_version: str
+            MIST version. This release supports only v1.2.
+        vvcrit: float
+            The value of V/Vcrit used for prepared data selection.
         """
+        mist_version = _require_supported_mist_version(mist_version)
         if data_prefix is None:
-            data_prefix = utils.get_data_path()
-        self.isoInt = TheoryInterpolator(data_prefix, spatial_order=spatial_order)
+            data_prefix = utils.get_data_path_for_grid(
+                mist_version=mist_version, vvcrit=vvcrit, create=False)
+        self.isoInt = TheoryInterpolator(data_prefix,
+                                         spatial_order=spatial_order,
+                                         mist_version=mist_version,
+                                         vvcrit=vvcrit)
         self.bolomInt = bolom.BCInterpolator(data_prefix, filts)
 
     def __call__(self, mass, logage, feh):

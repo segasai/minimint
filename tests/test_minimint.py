@@ -25,6 +25,18 @@ def test_filters():
     minimint.list_filters()
 
 
+def test_grid_path_helper(tmp_path, monkeypatch):
+    monkeypatch.setenv('MINIMINT_DATA_PATH', str(tmp_path))
+    p = mm_utils.get_data_path_for_grid(mist_version='1.2', vvcrit=0.4)
+    assert p.endswith(os.path.join('mist_v1.2', 'vvcrit0.4'))
+    assert os.path.isdir(p)
+
+
+def test_unsupported_version_rejected():
+    with pytest.raises(ValueError):
+        minimint.Interpolator(['DECam_g'], mist_version='2.5')
+
+
 def test_example():
 
     filters = [

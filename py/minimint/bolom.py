@@ -4,7 +4,8 @@ import re
 import os
 import astropy.table as atpy
 import numpy as np
-from .utils import get_data_path, tail_head, _get_cubic_coeffs, _interpolator_4d
+from .utils import (get_data_path, get_data_path_for_grid, tail_head,
+                    _get_cubic_coeffs, _interpolator_4d)
 
 POINTS_NPY = 'bolom_points.npy'
 FILT_NPY = 'filt_%s.npy'
@@ -100,13 +101,17 @@ class BCInterpolator:
         return res
 
 
-def list_filters(path=None):
+def list_filters(path=None, mist_version='1.2', vvcrit=0.4):
     """
     Return the list of photometric filters for which the isochrones
     can be constructed
     """
     if path is None:
-        path = get_data_path()
+        path = get_data_path_for_grid(mist_version=mist_version,
+                                      vvcrit=vvcrit,
+                                      create=False)
+        if not os.path.isdir(path):
+            path = get_data_path()
 
     fs = glob.glob(os.path.join(path, FILT_NPY % '*'))
     filts = []

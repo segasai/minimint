@@ -7,6 +7,7 @@ import subprocess
 import urllib.request
 import astropy.table as atpy
 import scipy.interpolate
+import itertools
 
 import numpy as np
 from minimint import bolom, utils
@@ -37,19 +38,79 @@ def get_file(gridt):
 
 INTERP_NPZ = 'interp.npz'
 VALID_EEP_MAX_NPY = 'valid_eep_max.npy'
+KNOWN_BAD_TRACK = dict(feh=-2.0, afe=0.2, initial_mass=0.1)
 
 
 def get_interp_ready_file(gridt):
     return f'{gridt}_interp_grid.npy'
 
 
-def _require_supported_mist_version(mist_version):
+def _normalize_mist_version(mist_version):
     mist_version = utils.normalize_mist_version(mist_version)
-    if mist_version != '1.2':
+    if mist_version not in ('1.2', '2.5'):
         raise ValueError(
-            f'Only MIST v1.2 is supported in this release, got: {mist_version}'
+            f'Only MIST versions 1.2 and 2.5 are supported, got: {mist_version}'
         )
     return mist_version
+
+
+def _is_known_bad_track(feh, afe, initial_mass):
+    return (np.isclose(feh, KNOWN_BAD_TRACK['feh'])
+            and np.isclose(afe, KNOWN_BAD_TRACK['afe'])
+            and np.isclose(initial_mass, KNOWN_BAD_TRACK['initial_mass']))
+
+
+def _is_substellar_lowmass_track(track_type, initial_mass):
+    return (np.isclose(initial_mass, KNOWN_BAD_TRACK['initial_mass'])
+            and str(track_type).strip().lower().startswith('substellar'))
+
+
+def _patch_known_bad_track(grid, ufeh, uafe, umass, grid_name):
+    """
+    Fill the known-bad missing track (feh=-2, afe=0.2, mass=0.1) from
+    neighboring alpha tracks.
+    """
+    if grid.ndim != 4:
+        return False
+    feh_idx = np.where(np.isclose(ufeh, KNOWN_BAD_TRACK['feh']))[0]
+    afe_idx = np.where(np.isclose(uafe, KNOWN_BAD_TRACK['afe']))[0]
+    mass_idx = np.where(np.isclose(umass, KNOWN_BAD_TRACK['initial_mass']))[0]
+    if len(feh_idx) == 0 or len(afe_idx) == 0 or len(mass_idx) == 0:
+        return False
+    fi, ai, mi = int(feh_idx[0]), int(afe_idx[0]), int(mass_idx[0])
+    if np.isfinite(grid[fi, ai, mi, :]).all():
+        return False
+
+    lo_idx = np.where(np.isclose(uafe, 0.0))[0]
+    hi_idx = np.where(np.isclose(uafe, 0.4))[0]
+    if len(lo_idx) == 0 or len(hi_idx) == 0:
+        return False
+    a0, a1 = int(lo_idx[0]), int(hi_idx[0])
+    t = (KNOWN_BAD_TRACK['afe'] - uafe[a0]) / (uafe[a1] - uafe[a0])
+    v0 = grid[fi, a0, mi, :]
+    v1 = grid[fi, a1, mi, :]
+    both = np.isfinite(v0) & np.isfinite(v1)
+    only0 = np.isfinite(v0) & ~np.isfinite(v1)
+    only1 = ~np.isfinite(v0) & np.isfinite(v1)
+    out = np.zeros_like(v0, dtype=np.float64) + np.nan
+    out[both] = v0[both] * (1 - t) + v1[both] * t
+    out[only0] = v0[only0]
+    out[only1] = v1[only1]
+
+    # Last resort: copy from adjacent mass track at same (feh, afe).
+    if mi + 1 < grid.shape[2]:
+        miss = ~np.isfinite(out)
+        out[miss] = grid[fi, ai, mi + 1, :][miss]
+
+    if grid_name == 'logage':
+        good = np.isfinite(out)
+        if good.any():
+            out[good] = np.maximum.accumulate(out[good])
+    if grid_name == 'phase':
+        out[np.isfinite(out)] = np.round(out[np.isfinite(out)])
+
+    grid[fi, ai, mi, :] = out
+    return True
 
 
 def getheader(f):
@@ -76,23 +137,45 @@ def read_grid(eep_prefix):
     mask = os.path.join(eep_prefix, '*EEPS', '*eep')
     fs = glob.glob(mask)
     if len(fs) == 0:
-        raise RuntimeError(f'Failed to find eep files {mask}')
+        mask = os.path.join(eep_prefix, '**', '*eep')
+        fs = glob.glob(mask, recursive=True)
+    if len(fs) == 0:
+        raise RuntimeError(f'Failed to find eep files under {eep_prefix}')
     tmpfile = utils.tail_head(fs[0], 11, 10)
     tab0 = atpy.Table().read(tmpfile, format='ascii.fast_commented_header')
     os.unlink(tmpfile)
     tabs0 = []
     N = len(fs)
+    nskip_bad = 0
+    nskip_substellar = 0
+    nstep = max(N // 100, 1)
     for i, f in enumerate(fs):
-        if i % (N // 100) == 0:
+        if i % nstep == 0:
             print('%d/%d' % (i, N))
+        D = getheader(f)
+        if _is_substellar_lowmass_track(D['type'], D['initial_mass']):
+            if _is_known_bad_track(D['feh'], D['afe'], D['initial_mass']):
+                nskip_bad += 1
+            else:
+                nskip_substellar += 1
+            continue
         curt = atpy.Table().read(f, format='ascii.fast_no_header')
         for i, k in enumerate(list(curt.columns)):
             curt.rename_column(k, list(tab0.columns)[i])
-        D = getheader(f)
         curt['initial_mass'] = D['initial_mass']
         curt['feh'] = D['feh']
+        curt['afe'] = D['afe']
         curt['EEP'] = np.arange(len(curt))
         tabs0.append(curt)
+    if nskip_bad > 0:
+        warnings.warn(
+            f'Skipped {nskip_bad} known-bad MIST v2.5 track(s) '
+            '(feh=-2.0, afe=0.2, mass=0.1).')
+    if nskip_substellar > 0:
+        warnings.warn(
+            f'Skipped {nskip_substellar} substellar 0.1 Msun track(s). '
+            'These edge-of-grid tracks are excluded and will not be '
+            'interpolated.')
 
     tabs = atpy.vstack(tabs0)
     if 'comments' in tabs.meta:
@@ -102,7 +185,7 @@ def read_grid(eep_prefix):
     for k in list(tabs.columns):
         if k not in [
                 'star_age', 'star_mass', 'log_L', 'log_g', 'log_Teff',
-                'initial_mass', 'phase', 'feh', 'EEP'
+                'initial_mass', 'phase', 'feh', 'afe', 'EEP'
         ]:
             tabs.remove_column(k)
 
@@ -167,13 +250,78 @@ def build_interp_ready_grid(grid):
     return grid_filled
 
 
-def __bc_url(x):
+def build_interp_ready_grid_4d(grid):
+    """
+    Prepare a finite 4D grid (feh, afe, mass, eep) for cubic interpolation.
+    """
+    grid_filled = np.array(grid, copy=True)
+    for i in range(grid_filled.shape[0]):
+        for j in range(grid_filled.shape[1]):
+            for k in range(grid_filled.shape[3]):
+                arr = grid_filled[i, j, :, k]
+                xids = np.nonzero(np.isfinite(arr))[0]
+                if len(xids) > 0:
+                    grid1d_filler(arr)
+                    arr[:xids[0]] = arr[xids[0]]
+                    arr[xids[-1] + 1:] = arr[xids[-1]]
+                else:
+                    arr[:] = 0
+    for j in range(grid_filled.shape[1]):
+        for m in range(grid_filled.shape[2]):
+            for k in range(grid_filled.shape[3]):
+                arr = grid_filled[:, j, m, k]
+                xids = np.nonzero(np.isfinite(arr))[0]
+                if len(xids) > 0:
+                    grid1d_filler(arr)
+                    arr[:xids[0]] = arr[xids[0]]
+                    arr[xids[-1] + 1:] = arr[xids[-1]]
+                else:
+                    arr[:] = 0
+    for i in range(grid_filled.shape[0]):
+        for m in range(grid_filled.shape[2]):
+            for k in range(grid_filled.shape[3]):
+                arr = grid_filled[i, :, m, k]
+                xids = np.nonzero(np.isfinite(arr))[0]
+                if len(xids) > 0:
+                    grid1d_filler(arr)
+                    arr[:xids[0]] = arr[xids[0]]
+                    arr[xids[-1] + 1:] = arr[xids[-1]]
+                else:
+                    arr[:] = 0
+    return grid_filled
+
+
+def __bc_url_v12(x):
     return 'https://waps.cfa.harvard.edu/MIST/BC_tables/%s.txz' % x
 
 
-def __eep_url(x, vvcrit=0.4):
+def __bc_url_v25(x):
+    return 'https://mist.science/BC_tables/v2/%s.txz' % x
+
+
+def __eep_url_v12(x, vvcrit=0.4):
     return ('https://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/' +
             'MIST_v1.2_feh_%s_afe_p0.0_vvcrit%.1f_EEPS.txz') % (x, vvcrit)
+
+
+def _format_feh_v25(feh):
+    sign = 'm' if feh < 0 else 'p'
+    val = int(round(abs(feh) * 100))
+    return f"{sign}{val:03d}"
+
+
+def _format_afe_v25(afe):
+    sign = 'm' if afe < 0 else 'p'
+    val = int(round(abs(afe) * 10))
+    return f"{sign}{val:d}"
+
+
+def __eep_url_v25(feh, afe, vvcrit=0.4):
+    feh_tag = _format_feh_v25(feh)
+    afe_tag = _format_afe_v25(afe)
+    return ('https://mist.science/data/tarballs_v2.5/eeps/' +
+            'MIST_v2.5_feh_%s_afe_%s_vvcrit%.1f_EEPS.txz') % (feh_tag,
+                                                              afe_tag, vvcrit)
 
 
 def download_and_prepare(filters=[
@@ -183,7 +331,9 @@ def download_and_prepare(filters=[
                          outp_prefix=None,
                          tmp_prefix=None,
                          vvcrit=0.4,
-                         mist_version='1.2'):
+                         mist_version='1.2',
+                         feh_values=None,
+                         afe_values=None):
     """ Download the MIST isochrones and prepare the prerocessed isochrones
     Parameters
 
@@ -198,12 +348,33 @@ def download_and_prepare(filters=[
         The value of V/Vcrit for the isochrones. The default value is 0.4, but
         you can also use the value of 0
     mist_version: str
-        MIST version. This release supports only v1.2.
+        MIST version ("1.2" or "2.5").
+    feh_values: list (optional)
+        List of [Fe/H] values to download. If None, uses defaults for version.
+    afe_values: list (optional)
+        List of [alpha/Fe] values to download. Ignored for v1.2.
     """
-    _require_supported_mist_version(mist_version)
-
-    mets = ('m4.00,m3.50,m3.00,m2.50,m2.00,m1.75,m1.50,m1.25,' +
-            'm1.00,m0.75,m0.50,m0.25,p0.00,p0.25,p0.50').split(',')
+    mist_version = _normalize_mist_version(mist_version)
+    if outp_prefix is None:
+        outp_prefix = utils.get_data_path_for_grid(mist_version=mist_version,
+                                                   vvcrit=vvcrit)
+    if mist_version == '1.2':
+        if feh_values is None:
+            feh_values = [
+                -4.00, -3.50, -3.00, -2.50, -2.00, -1.75, -1.50, -1.25,
+                -1.00, -0.75, -0.50, -0.25, 0.00, 0.25, 0.50
+            ]
+        if afe_values is None:
+            afe_values = [0.0]
+        if not np.all(np.isclose(afe_values, 0.0)):
+            raise ValueError('MIST v1.2 supports only [alpha/Fe]=0.0')
+    else:
+        if feh_values is None:
+            feh_values = ([-4.0, -3.5, -3.0] +
+                          list(np.round(np.arange(-2.75, 0.50 + 0.25, 0.25),
+                                        2)))
+        if afe_values is None:
+            afe_values = np.round(np.arange(-0.2, 0.6 + 0.2, 0.2), 2)
     if not np.isclose([0., 0.4], vvcrit).any():
         raise ValueError('Only 0 and 0.4 values are allowed')
 
@@ -230,9 +401,20 @@ def download_and_prepare(filters=[
 
     with tempfile.TemporaryDirectory(dir=tmp_prefix) as T:
         for curfilt in filters:
-            writer(__bc_url(curfilt), T)
-        for curmet in mets:
-            writer(__eep_url(curmet, vvcrit=vvcrit), T)
+            if mist_version == '1.2':
+                writer(__bc_url_v12(curfilt), T)
+            else:
+                writer(__bc_url_v25(curfilt), T)
+        if mist_version == '1.2':
+            mets = [f"{'m' if x < 0 else 'p'}{abs(x):.2f}" for x in feh_values]
+            for curmet in mets:
+                writer(__eep_url_v12(curmet, vvcrit=vvcrit), T)
+        else:
+            for curfeh in feh_values:
+                for curafe in afe_values:
+                    if np.isclose(curfeh, 0.5) and np.isclose(curafe, 0.6):
+                        continue
+                    writer(__eep_url_v25(curfeh, curafe, vvcrit=vvcrit), T)
         prepare(T,
                 T,
                 outp_prefix=outp_prefix,
@@ -258,7 +440,7 @@ def prepare(eep_prefix,
     bolom_prefix: string
         The path that has bolometric correction files *DECam *UBRI etc
     """
-    mist_version = _require_supported_mist_version(mist_version)
+    mist_version = _normalize_mist_version(mist_version)
     if outp_prefix is None:
         outp_prefix = utils.get_data_path_for_grid(mist_version=mist_version,
                                                    vvcrit=vvcrit)
@@ -275,50 +457,91 @@ def prepare(eep_prefix,
     umass, mass_id = np.unique(np.array(tab['initial_mass']),
                                return_inverse=True)
     ufeh, feh_id = np.unique(np.array(tab['feh']), return_inverse=True)
+    uafe, afe_id = np.unique(np.array(tab['afe']), return_inverse=True)
 
     neep = int(np.max(np.asarray(tab['EEP'], dtype=np.int64))) + 1
     nfeh = len(ufeh)
+    nafe = len(uafe)
     nmass = len(umass)
+    grid_ndim = 4 if nafe > 1 else 3
     grids = ['logage', 'logteff', 'logg', 'logl', 'phase']
     grid_store = {}
     for k in grids:
-        grid = np.zeros((nfeh, nmass, neep)) - np.nan
-        if k == 'logage':
-            grid[feh_id, mass_id, tab['EEP']] = np.log10(tab['star_age'])
-            grid[:, :, 1:] = np.diff(grid, axis=2)
-        elif k == 'logteff':
-            grid[feh_id, mass_id, tab['EEP']] = tab['log_Teff']
-        elif k == 'logg':
-            grid[feh_id, mass_id, tab['EEP']] = tab['log_g']
-        elif k == 'logl':
-            grid[feh_id, mass_id, tab['EEP']] = tab['log_L']
-        elif k == 'phase':
-            grid[feh_id, mass_id, tab['EEP']] = tab['phase']
+        if grid_ndim == 3:
+            grid = np.zeros((nfeh, nmass, neep)) - np.nan
+            if k == 'logage':
+                grid[feh_id, mass_id, tab['EEP']] = np.log10(tab['star_age'])
+                grid[:, :, 1:] = np.diff(grid, axis=2)
+            elif k == 'logteff':
+                grid[feh_id, mass_id, tab['EEP']] = tab['log_Teff']
+            elif k == 'logg':
+                grid[feh_id, mass_id, tab['EEP']] = tab['log_g']
+            elif k == 'logl':
+                grid[feh_id, mass_id, tab['EEP']] = tab['log_L']
+            elif k == 'phase':
+                grid[feh_id, mass_id, tab['EEP']] = tab['phase']
+            else:
+                raise Exception('wrong ' + k)
+            grid3d_filler(grid)
         else:
-            raise Exception('wrong ' + k)
-
-        grid3d_filler(grid)
+            grid = np.zeros((nfeh, nafe, nmass, neep)) - np.nan
+            if k == 'logage':
+                grid[feh_id, afe_id, mass_id,
+                     tab['EEP']] = np.log10(tab['star_age'])
+                grid[:, :, :, 1:] = np.diff(grid, axis=3)
+            elif k == 'logteff':
+                grid[feh_id, afe_id, mass_id, tab['EEP']] = tab['log_Teff']
+            elif k == 'logg':
+                grid[feh_id, afe_id, mass_id, tab['EEP']] = tab['log_g']
+            elif k == 'logl':
+                grid[feh_id, afe_id, mass_id, tab['EEP']] = tab['log_L']
+            elif k == 'phase':
+                grid[feh_id, afe_id, mass_id, tab['EEP']] = tab['phase']
+            else:
+                raise Exception('wrong ' + k)
+            for i in range(nfeh):
+                for j in range(nafe):
+                    for e in range(neep):
+                        grid1d_filler(grid[i, j, :, e])
+            if k != 'logage':
+                _patch_known_bad_track(grid, ufeh, uafe, umass, k)
 
         if k == 'phase':
             grid[~np.isfinite(grid)] = -99
             grid = np.round(grid).astype(np.int8)
         if k == 'logage':
-            grid[:, :, :] = np.cumsum(grid, axis=2)
+            if grid_ndim == 3:
+                grid[:, :, :] = np.cumsum(grid, axis=2)
+            else:
+                grid[:, :, :, :] = np.cumsum(grid, axis=3)
+                _patch_known_bad_track(grid, ufeh, uafe, umass, k)
 
         grid_store[k] = grid
         np.save(os.path.join(outp_prefix, get_file(k)), grid)
 
-    valid_eep_max = np.max(np.where(np.isfinite(grid_store['logage']),
-                                    np.arange(neep)[None, None, :], -1),
-                           axis=2).astype(np.int16)
+    if grid_ndim == 3:
+        valid_eep_max = np.max(np.where(np.isfinite(grid_store['logage']),
+                                        np.arange(neep)[None, None, :], -1),
+                               axis=2).astype(np.int16)
+    else:
+        valid_eep_max = np.max(
+            np.where(np.isfinite(grid_store['logage']),
+                     np.arange(neep)[None, None, None, :], -1),
+            axis=3).astype(np.int16)
     np.save(os.path.join(outp_prefix, VALID_EEP_MAX_NPY), valid_eep_max)
     for k in ('logg', 'logl', 'logteff'):
+        if grid_ndim == 3:
+            interp_ready = build_interp_ready_grid(grid_store[k])
+        else:
+            interp_ready = build_interp_ready_grid_4d(grid_store[k])
         np.save(os.path.join(outp_prefix, get_interp_ready_file(k)),
-                build_interp_ready_grid(grid_store[k]))
+                interp_ready)
     np.savez(os.path.join(outp_prefix, INTERP_NPZ),
              umass=umass,
              ufeh=ufeh,
+             uafe=uafe,
              neep=neep,
+             grid_ndim=grid_ndim,
              mist_version=mist_version,
              vvcrit=np.float64(vvcrit))
     print('Reading/processing bolometric corrections')
@@ -395,7 +618,7 @@ def _binary_search(bads, logage, neep, getAge):
     return lefts, rights, bads
 
 
-def _interpolator(grid, wfeh, ifehs, wmass, imasses, ieep):
+def _interpolator_2d_eep(grid, wfeh, ifehs, wmass, imasses, ieep):
     ieep = np.asarray(ieep, dtype=int)
     return utils._interpolator_2d(grid, wfeh, ifehs, wmass, imasses, ieep)
 
@@ -407,22 +630,7 @@ class TheoryInterpolator:
                  spatial_order=1,
                  mist_version='1.2',
                  vvcrit=0.4):
-        """
-        Construct the interpolator that computes theoretical
-        quantities (logg, logl, logteff) given (mass, logage, feh)
-
-        Parameters
-        ----------
-        prefix: str
-            Path to the data folder
-        spatial_order: int
-            Order of spatial interpolation (1 for linear, 3 for cubic)
-        mist_version: str
-            MIST version. This release supports only v1.2.
-        vvcrit: float
-            The value of V/Vcrit used for prepared data selection.
-        """
-        mist_version = _require_supported_mist_version(mist_version)
+        mist_version = _normalize_mist_version(mist_version)
         if prefix is None:
             prefix = utils.get_data_path_for_grid(mist_version=mist_version,
                                                   vvcrit=vvcrit,
@@ -440,7 +648,9 @@ class TheoryInterpolator:
         with np.load(meta_path) as meta:
             self.umass = np.array(meta['umass'])
             self.ufeh = np.array(meta['ufeh'])
+            self.uafe = np.array(meta['uafe']) if 'uafe' in meta.files else np.array([0.0])
             self.neep = int(meta['neep'])
+            self.grid_ndim = int(meta['grid_ndim']) if 'grid_ndim' in meta.files else 3
             self.mist_version = str(meta.get('mist_version', mist_version))
             self.vvcrit = float(meta.get('vvcrit', vvcrit))
         valid_eep_path = os.path.join(prefix, VALID_EEP_MAX_NPY)
@@ -449,16 +659,31 @@ class TheoryInterpolator:
                 f'Validity file {VALID_EEP_MAX_NPY} not found in {prefix}. '
                 'Please re-run minimint.download_and_prepare(...)')
         self.valid_eep_max = np.load(valid_eep_path)
-            
         if spatial_order not in (1, 3):
             raise ValueError('spatial_order must be 1 (linear) or 3 (cubic)')
         self.spatial_order = spatial_order
+        self._warned_afe = False
+
+    def _warn_afe_ignored(self, afe):
+        if self.grid_ndim == 3 and (not self._warned_afe):
+            if np.any(~np.isclose(np.asarray(afe, dtype=np.float64), 0.0)):
+                warnings.warn('[alpha/Fe] is ignored for MIST v1.2 grids.')
+                self._warned_afe = True
 
     def _eval_linear_interp(self, grid, DD, ieep, subset=None):
         if subset is None:
             subset = slice(None)
-        return _interpolator(grid, DD['wfeh_lin'][subset], DD['ifehs_lin'][subset],
-                             DD['wmass_lin'][subset], DD['imasses_lin'][subset], ieep)
+        if self.grid_ndim == 3:
+            return _interpolator_2d_eep(grid, DD['wfeh_lin'][subset],
+                                        DD['ifehs_lin'][subset],
+                                        DD['wmass_lin'][subset],
+                                        DD['imasses_lin'][subset], ieep)
+        return utils._interpolator_3d_eep(grid, DD['wfeh_lin'][subset],
+                                          DD['ifehs_lin'][subset],
+                                          DD['wafe_lin'][subset],
+                                          DD['iafes_lin'][subset],
+                                          DD['wmass_lin'][subset],
+                                          DD['imasses_lin'][subset], ieep)
 
     def _eval_spatial_interp(self, grid, DD, ieep, subset=None, use_cubic=False):
         if subset is None:
@@ -466,34 +691,183 @@ class TheoryInterpolator:
         if not (use_cubic and self.spatial_order == 3):
             return self._eval_linear_interp(grid, DD, ieep, subset=subset)
 
-        wf = DD['wf'][subset]
-        ifehs = DD['ifehs'][subset]
-        wm = DD['wm'][subset]
-        imasses = DD['imasses'][subset]
         ieep = np.asarray(ieep, dtype=int)
-
-        res = utils._interpolator_bicubic(grid, wf, ifehs, wm, imasses, ieep)
-        bad = np.zeros(len(res), dtype=bool)
-        for i in range(4):
-            for j in range(4):
-                bad |= ~np.isfinite(grid[ifehs[:, i], imasses[:, j], ieep])
+        if self.grid_ndim == 3:
+            wf = DD['wf'][subset]
+            ifehs = DD['ifehs'][subset]
+            wm = DD['wm'][subset]
+            imasses = DD['imasses'][subset]
+            res = utils._interpolator_bicubic(grid, wf, ifehs, wm, imasses, ieep)
+            bad = np.zeros(len(res), dtype=bool)
+            for i in range(4):
+                for j in range(4):
+                    bad |= ~np.isfinite(grid[ifehs[:, i], imasses[:, j], ieep])
+        else:
+            wf = DD['wf'][subset]
+            ifehs = DD['ifehs'][subset]
+            wa = DD['wa'][subset]
+            iafes = DD['iafes'][subset]
+            wm = DD['wm'][subset]
+            imasses = DD['imasses'][subset]
+            res = utils._interpolator_3d_eep(grid, wf, ifehs, wa, iafes, wm,
+                                             imasses, ieep)
+            bad = np.zeros(len(res), dtype=bool)
+            for i in range(4):
+                for j in range(4):
+                    for k in range(4):
+                        bad |= ~np.isfinite(grid[ifehs[:, i], iafes[:, j],
+                                                 imasses[:, k], ieep])
         if bad.any():
             bad_idx = np.nonzero(bad)[0]
-            local = np.arange(len(res))
+            if isinstance(subset, slice):
+                subset_idx = np.arange(DD['wfeh_lin'].shape[0])[subset]
+            else:
+                subset_idx = np.asarray(subset)
             res[bad] = self._eval_linear_interp(grid, DD, ieep[bad_idx],
-                                                subset=local[bad])
+                                                subset=subset_idx[bad_idx])
         return res
 
-    def __call__(self, mass, logage, feh):
-        """
-        Return the theoretical isochrone values such as logL, logg, logteff
-        correspoding to the mass, logage and feh
-        """
-        feh, mass, logage = [
-            np.atleast_1d(np.asarray(_)) for _ in [feh, mass, logage]
+    def _get_eep_coeffs(self, mass, logage, feh, afe=0.0):
+        feh, mass, logage, afe = [
+            np.atleast_1d(np.asarray(_, dtype=np.float64))
+            for _ in [feh, mass, logage, afe]
         ]
         N = len(logage)
-        DD = self._get_eep_coeffs(mass, logage, feh)
+        l1feh = np.searchsorted(self.ufeh, feh) - 1
+        l2feh = l1feh + 1
+        l1mass = np.searchsorted(self.umass, mass) - 1
+        l2mass = l1mass + 1
+        bads = np.zeros(N, dtype=bool)
+        if self.grid_ndim == 3:
+            bads |= (l2mass >= len(self.umass)) | (l2feh >= len(self.ufeh))
+            bads |= (l1mass < 0) | (l1feh < 0)
+        else:
+            l1afe = np.searchsorted(self.uafe, afe) - 1
+            l2afe = l1afe + 1
+            bads |= (l2mass >= len(self.umass)) | (l2feh >= len(self.ufeh))
+            bads |= (l2afe >= len(self.uafe))
+            bads |= (l1mass < 0) | (l1feh < 0) | (l1afe < 0)
+            l1afe[bads] = 0
+            l2afe[bads] = 1
+        l1mass[bads] = 0
+        l2mass[bads] = 1
+        l1feh[bads] = 0
+        l2feh[bads] = 1
+
+        wfeh_lin, ifehs_lin = utils._get_linear_coeffs(feh, self.ufeh, l1feh)
+        wmass_lin, imasses_lin = utils._get_linear_coeffs(mass, self.umass,
+                                                          l1mass)
+        if self.grid_ndim == 4:
+            wafe_lin, iafes_lin = utils._get_linear_coeffs(afe, self.uafe,
+                                                           l1afe)
+
+        wf = ifehs = wm = imasses = wa = iafes = None
+        if self.spatial_order == 3:
+            wf, ifehs = utils._get_cubic_coeffs(feh, self.ufeh, l1feh)
+            wm, imasses = utils._get_cubic_coeffs(mass, self.umass, l1mass)
+            if self.grid_ndim == 4:
+                wa, iafes = utils._get_cubic_coeffs(afe, self.uafe, l1afe)
+
+        def getAge(cureep_vec, subset):
+            if np.isscalar(cureep_vec):
+                cureep_vec = np.full(len(subset), float(cureep_vec))
+            ieep = np.asarray(cureep_vec, dtype=int)
+            if self.spatial_order == 3:
+                if self.grid_ndim == 3:
+                    res = utils._interpolator_bicubic(
+                        self.logage_grid, wf[subset], ifehs[subset],
+                        wm[subset], imasses[subset], ieep)
+                    bad = np.zeros(len(res), dtype=bool)
+                    for i in range(4):
+                        for j in range(4):
+                            bad |= ~np.isfinite(
+                                self.logage_grid[ifehs[subset, i],
+                                                 imasses[subset, j], ieep])
+                else:
+                    res = utils._interpolator_3d_eep(
+                        self.logage_grid, wf[subset], ifehs[subset],
+                        wa[subset], iafes[subset], wm[subset],
+                        imasses[subset], ieep)
+                    bad = np.zeros(len(res), dtype=bool)
+                    for i in range(4):
+                        for j in range(4):
+                            for k in range(4):
+                                bad |= ~np.isfinite(
+                                    self.logage_grid[ifehs[subset, i],
+                                                     iafes[subset, j],
+                                                     imasses[subset, k], ieep])
+                if bad.any():
+                    if self.grid_ndim == 3:
+                        res[bad] = _interpolator_2d_eep(
+                            self.logage_grid, wfeh_lin[subset][bad],
+                            ifehs_lin[subset][bad], wmass_lin[subset][bad],
+                            imasses_lin[subset][bad], ieep[bad])
+                    else:
+                        res[bad] = utils._interpolator_3d_eep(
+                            self.logage_grid, wfeh_lin[subset][bad],
+                            ifehs_lin[subset][bad], wafe_lin[subset][bad],
+                            iafes_lin[subset][bad], wmass_lin[subset][bad],
+                            imasses_lin[subset][bad], ieep[bad])
+                return res
+            if self.grid_ndim == 3:
+                return _interpolator_2d_eep(self.logage_grid, wfeh_lin[subset],
+                                            ifehs_lin[subset],
+                                            wmass_lin[subset],
+                                            imasses_lin[subset], ieep)
+            return utils._interpolator_3d_eep(self.logage_grid,
+                                              wfeh_lin[subset],
+                                              ifehs_lin[subset],
+                                              wafe_lin[subset],
+                                              iafes_lin[subset],
+                                              wmass_lin[subset],
+                                              imasses_lin[subset], ieep)
+
+        lefts, rights, bads = _binary_search(bads, logage, self.neep, getAge)
+        eep_frac = np.zeros(len(mass))
+        good = ~bads
+        if good.any():
+            left_m1 = np.clip(lefts[good] - 1, 0, self.neep - 1).astype(float)
+            left_0 = lefts[good].astype(float)
+            right_1 = rights[good].astype(float)
+            right_2 = np.clip(rights[good] + 1, 0, self.neep - 1).astype(float)
+            subset_idx = np.nonzero(good)[0]
+            y_m1 = getAge(left_m1, subset_idx)
+            y_0 = getAge(left_0, subset_idx)
+            y_1 = getAge(right_1, subset_idx)
+            y_2 = getAge(right_2, subset_idx)
+            eep_frac[good] = utils.solve_steffen_t(y_m1, y_0, y_1, y_2,
+                                                   logage[good])
+
+        ret = dict(wfeh_lin=wfeh_lin,
+                   ifehs_lin=ifehs_lin,
+                   wmass_lin=wmass_lin,
+                   imasses_lin=imasses_lin,
+                   eep_frac=eep_frac,
+                   bad=bads,
+                   l1feh=l1feh,
+                   l2feh=l2feh,
+                   l1mass=l1mass,
+                   l2mass=l2mass,
+                   eep1=lefts,
+                   eep2=rights)
+        if self.grid_ndim == 4:
+            ret.update(dict(wafe_lin=wafe_lin,
+                            iafes_lin=iafes_lin,
+                            l1afe=l1afe,
+                            l2afe=l2afe))
+        if self.spatial_order == 3:
+            ret.update(dict(wf=wf, ifehs=ifehs, wm=wm, imasses=imasses))
+            if self.grid_ndim == 4:
+                ret.update(dict(wa=wa, iafes=iafes))
+        return ret
+
+    def __call__(self, mass, logage, feh, afe=0.0):
+        self._warn_afe_ignored(afe)
+        feh, mass, logage, afe = [
+            np.atleast_1d(np.asarray(_)) for _ in [feh, mass, logage, afe]
+        ]
+        N = len(logage)
+        DD = self._get_eep_coeffs(mass, logage, feh, afe=afe)
         eep1, eep2, eep_frac, bad = (DD['eep1'], DD['eep2'], DD['eep_frac'],
                                      DD['bad'])
         good = ~bad
@@ -524,7 +898,6 @@ class TheoryInterpolator:
                 xret[curkey] = utils.steffen_interp(curr[0], curr[1], curr[2],
                                                     curr[3], eep_frac_good)
 
-            # Keep phase interpolation linear to avoid cubic overshoot
             phase0 = self._eval_linear_interp(self.phase_grid, DD,
                                               eep1_good.astype(int),
                                               subset=good_idx)
@@ -540,93 +913,80 @@ class TheoryInterpolator:
                 ret[k][good] = xret[k]
         return ret
 
-    def getLogAgeFromEEP(self, mass, eep, feh, returnJac=False):
-        """
-        This method returns the log(age) for given mass eep and feh
-
-        if returnJac is true the derivative is of d(log(age))/deep is returned
-        """
-        feh, mass, eep = [
+    def getLogAgeFromEEP(self, mass, eep, feh, afe=0.0, returnJac=False):
+        self._warn_afe_ignored(afe)
+        feh, mass, eep, afe = [
             np.atleast_1d(np.asarray(_, dtype=np.float64))
-            for _ in [feh, mass, eep]
+            for _ in [feh, mass, eep, afe]
         ]
         neep = self.neep
-        N = len(feh)
         l1feh = np.searchsorted(self.ufeh, feh) - 1
         l2feh = l1feh + 1
         l1mass = np.searchsorted(self.umass, mass) - 1
         l2mass = l1mass + 1
-        bad = np.zeros(N, dtype=bool)
+        bad = np.zeros(len(feh), dtype=bool)
+        if self.grid_ndim == 3:
+            bad |= (l2mass >= len(self.umass)) | (l2feh >= len(self.ufeh))
+            bad |= (l1mass < 0) | (l1feh < 0)
+        else:
+            l1afe = np.searchsorted(self.uafe, afe) - 1
+            l2afe = l1afe + 1
+            bad |= (l2mass >= len(self.umass)) | (l2feh >= len(self.ufeh))
+            bad |= (l2afe >= len(self.uafe))
+            bad |= (l1mass < 0) | (l1feh < 0) | (l1afe < 0)
+            l1afe[bad] = 0
+        l1feh[bad] = 0
+        l1mass[bad] = 0
+
+        DD = {}
+        DD['wfeh_lin'], DD['ifehs_lin'] = utils._get_linear_coeffs(
+            feh, self.ufeh, l1feh)
+        DD['wmass_lin'], DD['imasses_lin'] = utils._get_linear_coeffs(
+            mass, self.umass, l1mass)
+        if self.grid_ndim == 4:
+            DD['wafe_lin'], DD['iafes_lin'] = utils._get_linear_coeffs(
+                afe, self.uafe, l1afe)
+        if self.spatial_order == 3:
+            DD['wf'], DD['ifehs'] = utils._get_cubic_coeffs(feh, self.ufeh,
+                                                             l1feh)
+            DD['wm'], DD['imasses'] = utils._get_cubic_coeffs(
+                mass, self.umass, l1mass)
+            if self.grid_ndim == 4:
+                DD['wa'], DD['iafes'] = utils._get_cubic_coeffs(
+                    afe, self.uafe, l1afe)
+
         eep1 = eep.astype(int)
         eep2 = eep1 + 1
-        bad = bad | (l2mass >= len(self.umass)) | (l2feh >= len(self.ufeh)) | (
-            l1mass < 0) | (l1feh < 0) | (eep2 >= neep) | (eep1 < 0)
-        l1mass[bad] = 0
-        l2mass[bad] = 1
-        l1feh[bad] = 0
-        l2feh[bad] = 1
+        bad |= (eep1 < 0) | (eep2 >= neep)
         eep1[bad] = 0
         eep2[bad] = 1
-        eep_frac = (eep - eep1)
-
+        eep_frac = eep - eep1
         goodsel = ~bad
-
-        wfeh_lin, ifehs_lin = utils._get_linear_coeffs(feh, self.ufeh, l1feh)
-        wmass_lin, imasses_lin = utils._get_linear_coeffs(mass, self.umass,
-                                                          l1mass)
-        wf = ifehs = wm = imasses = None
-        if self.spatial_order == 3:
-            wf, ifehs = utils._get_cubic_coeffs(feh, self.ufeh, l1feh)
-            wm, imasses = utils._get_cubic_coeffs(mass, self.umass, l1mass)
 
         ret_logage = np.zeros_like(mass) + np.nan
         jac = np.zeros_like(mass) + np.nan
         if goodsel.any():
+            good_idx = np.nonzero(goodsel)[0]
             eep_m1 = np.clip(eep1[goodsel] - 1, 0, neep - 1).astype(float)
             eep_0 = eep1[goodsel].astype(float)
             eep_1 = eep2[goodsel].astype(float)
             eep_2 = np.clip(eep2[goodsel] + 1, 0, neep - 1).astype(float)
-
-            def getAge(cureep_vec):
-                if self.spatial_order == 3:
-                    ieep = np.asarray(cureep_vec, dtype=int)
-                    res = utils._interpolator_bicubic(
-                        self.logage_grid, wf[goodsel], ifehs[goodsel],
-                        wm[goodsel], imasses[goodsel], ieep)
-                    bad = np.zeros(len(res), dtype=bool)
-                    for i in range(4):
-                        for j in range(4):
-                            bad |= ~np.isfinite(
-                                self.logage_grid[ifehs[goodsel, i],
-                                                 imasses[goodsel, j], ieep])
-                    if bad.any():
-                        res[bad] = _interpolator(
-                            self.logage_grid, wfeh_lin[goodsel][bad],
-                            ifehs_lin[goodsel][bad],
-                            wmass_lin[goodsel][bad],
-                            imasses_lin[goodsel][bad],
-                            np.asarray(cureep_vec)[bad])
-                    return res
-                return _interpolator(self.logage_grid, wfeh_lin[goodsel],
-                                     ifehs_lin[goodsel], wmass_lin[goodsel],
-                                     imasses_lin[goodsel], cureep_vec)
-
-            logage_m1 = getAge(eep_m1)
-            logage_0 = getAge(eep_0)
-            logage_1 = getAge(eep_1)
-            logage_2 = getAge(eep_2)
-
-            ret_logage[goodsel] = utils.steffen_interp(logage_m1, logage_0, logage_1, logage_2, eep_frac[goodsel])
+            logage_m1 = self._eval_spatial_interp(self.logage_grid, DD, eep_m1,
+                                                  subset=good_idx, use_cubic=True)
+            logage_0 = self._eval_spatial_interp(self.logage_grid, DD, eep_0,
+                                                 subset=good_idx, use_cubic=True)
+            logage_1 = self._eval_spatial_interp(self.logage_grid, DD, eep_1,
+                                                 subset=good_idx, use_cubic=True)
+            logage_2 = self._eval_spatial_interp(self.logage_grid, DD, eep_2,
+                                                 subset=good_idx, use_cubic=True)
+            ret_logage[goodsel] = utils.steffen_interp(logage_m1, logage_0,
+                                                       logage_1, logage_2,
+                                                       eep_frac[goodsel])
             jac[goodsel] = logage_1 - logage_0
-        
-        if returnJac:
-            ret = (ret_logage, jac)
-        else:
-            ret = ret_logage
-        return ret
+        return (ret_logage, jac) if returnJac else ret_logage
 
-    def getMaxMassMS(self, logage, feh):
-        """Find the approximate value of maximum mass on the main sequence """
+    def getMaxMassMS(self, logage, feh, afe=0.0):
+        self._warn_afe_ignored(afe)
         N = len(self.umass) - 1
         i1 = 1
         i2 = N - 1
@@ -635,7 +995,7 @@ class TheoryInterpolator:
             ix = (i1 + i2) // 2
             if (i2 - i1) == 1:
                 stop = True
-            res = self(self.umass[ix], logage, feh)
+            res = self(self.umass[ix], logage, feh, afe)
             phase = res['phase'][0]
             bad = np.isnan(phase)
             if phase > 0.5 or bad:
@@ -644,43 +1004,40 @@ class TheoryInterpolator:
                 i1 = ix
         return self.umass[i1]
 
-    def getMaxMass(self, logage, feh):
-        """
-        Determine the maximum mass that exists on the current isochrone
-        Parameters:
-        -----------
-        logage: float
-            Log10 of age
-        feh: float
-            Metallicity
-
-        Returns:
-        --------
-        maxMass: float
-            Maximum mass on the isochrone
-        """
-        logage, feh = np.float64(logage), np.float64(feh)
+    def getMaxMass(self, logage, feh, afe=0.0):
+        self._warn_afe_ignored(afe)
+        logage, feh, afe = np.float64(logage), np.float64(feh), np.float64(afe)
         niter = 40
         im1 = 0
         im2 = len(self.umass) - 1
         l1feh = np.searchsorted(self.ufeh, feh) - 1
-        if self._isvalid(self.umass[im2], logage, feh, l1feh=l1feh):
+        l1afe = np.searchsorted(self.uafe, afe) - 1 if self.grid_ndim == 4 else None
+        if self._isvalid(self.umass[im2],
+                         logage,
+                         feh,
+                         afe,
+                         l1feh=l1feh,
+                         l1afe=l1afe):
             return self.umass[im2]
         for _ in range(niter):
             curm = (im1 + im2) // 2
-            good = self._isvalid(self.umass[curm], logage, feh, l1feh=l1feh)
+            good = self._isvalid(self.umass[curm],
+                                 logage,
+                                 feh,
+                                 afe,
+                                 l1feh=l1feh,
+                                 l1afe=l1afe)
             if not good:
                 im1, im2 = im1, curm
             else:
                 im1, im2 = curm, im2
             if im2 - im1 == 1:
                 break
-
         lo = self.umass[im1]
         hi = self.umass[im2]
 
         def _isfinite_mass(m):
-            return np.isfinite(self(m, logage, feh)['logl'][0])
+            return np.isfinite(self(m, logage, feh, afe)['logl'][0])
 
         if not _isfinite_mass(lo):
             idx = im1
@@ -697,7 +1054,6 @@ class TheoryInterpolator:
                 return self.umass[idx]
             lo = self.umass[idx]
             hi = self.umass[idx + 1]
-
         tol = 1e-7
         for _ in range(64):
             mid = 0.5 * (lo + hi)
@@ -709,149 +1065,105 @@ class TheoryInterpolator:
                 break
         return lo * (1 - 1e-10)
 
-    def _get_eep_coeffs(self, mass, logage, feh):
-        """
-        This function gets all coefficients for interpolation.
-The interpolation is done in two stages:
-1) Spatial interpolation over (mass, feh) using axis weights
-2) Final interpolation over EEP axis
-"""
-        feh, mass, logage = [
-            np.atleast_1d(np.asarray(_, dtype=np.float64))
-            for _ in [feh, mass, logage]
-        ]
-        N = len(logage)
-        l1feh = np.searchsorted(self.ufeh, feh) - 1
-        l2feh = l1feh + 1
-        l1mass = np.searchsorted(self.umass, mass) - 1
-        l2mass = l1mass + 1
-        bads = np.zeros(N, dtype=bool)
-        bads = bads | (l2mass >= len(self.umass)) | (l2feh >= len(
-            self.ufeh)) | (l1mass < 0) | (l1feh < 0)
-        l1mass[bads] = 0
-        l2mass[bads] = 1
-        l1feh[bads] = 0
-        l2feh[bads] = 1
-
-        wfeh_lin, ifehs_lin = utils._get_linear_coeffs(feh, self.ufeh, l1feh)
-        wmass_lin, imasses_lin = utils._get_linear_coeffs(mass, self.umass,
-                                                          l1mass)
-
-        wf = ifehs = wm = imasses = None
-        if self.spatial_order == 3:
-            wf, ifehs = utils._get_cubic_coeffs(feh, self.ufeh, l1feh)
-            wm, imasses = utils._get_cubic_coeffs(mass, self.umass, l1mass)
-
-        def getAge(cureep_vec, subset):
-            if np.isscalar(cureep_vec):
-                cureep_vec = np.full(len(subset), float(cureep_vec))
-            if self.spatial_order == 3:
-                ieep = np.asarray(cureep_vec, dtype=int)
-                res = utils._interpolator_bicubic(self.logage_grid, wf[subset],
-                                                  ifehs[subset], wm[subset],
-                                                  imasses[subset], ieep)
-                bad = np.zeros(len(res), dtype=bool)
-                for i in range(4):
-                    for j in range(4):
-                        bad |= ~np.isfinite(
-                            self.logage_grid[ifehs[subset, i],
-                                             imasses[subset, j], ieep])
-                if bad.any():
-                    res[bad] = _interpolator(
-                        self.logage_grid, wfeh_lin[subset][bad],
-                        ifehs_lin[subset][bad], wmass_lin[subset][bad],
-                        imasses_lin[subset][bad], ieep[bad])
-                return res
-            return _interpolator(self.logage_grid, wfeh_lin[subset],
-                                 ifehs_lin[subset], wmass_lin[subset],
-                                 imasses_lin[subset], cureep_vec)
-
-        lefts, rights, bads = _binary_search(bads, logage, self.neep, getAge)
-        eep_frac = np.zeros(len(mass))
-        
-        good = ~bads
-        if good.any():
-            left_m1 = np.clip(lefts[good] - 1, 0, self.neep - 1).astype(float)
-            left_0 = lefts[good].astype(float)
-            right_1 = rights[good].astype(float)
-            right_2 = np.clip(rights[good] + 1, 0, self.neep - 1).astype(float)
-
-            subset_idx = np.nonzero(good)[0]
-            y_m1 = getAge(left_m1, subset_idx)
-            y_0 = getAge(left_0, subset_idx)
-            y_1 = getAge(right_1, subset_idx)
-            y_2 = getAge(right_2, subset_idx)
-
-            eep_frac[good] = utils.solve_steffen_t(y_m1, y_0, y_1, y_2, logage[good])
-        
-        ret = dict(wfeh_lin=wfeh_lin,
-                    ifehs_lin=ifehs_lin,
-                    wmass_lin=wmass_lin,
-                    imasses_lin=imasses_lin,
-                    eep_frac=eep_frac,
-                    bad=bads,
-                    l1feh=l1feh,
-                    l2feh=l2feh,
-                    l1mass=l1mass,
-                    l2mass=l2mass,
-                    eep1=lefts,
-                    eep2=rights)
-        if self.spatial_order == 3:
-            ret.update(dict(wf=wf, ifehs=ifehs, wm=wm, imasses=imasses))
-        return ret
-
-    def _isvalid(self, mass, logage, feh, l1feh=None):
-        """
-        Checks if the point on the isochrone is valid
-        """
+    def _isvalid(self, mass, logage, feh, afe=0.0, l1feh=None, l1afe=None):
         mass = np.float64(mass)
         logage = np.float64(logage)
         feh = np.float64(feh)
+        afe = np.float64(afe)
         if l1feh is None:
             l1feh = np.searchsorted(self.ufeh, feh) - 1
         l2feh = l1feh + 1
         l1mass = np.searchsorted(self.umass, mass) - 1
         l2mass = l1mass + 1
-
-        if ((l2mass >= len(self.umass)) or (l2feh >= len(self.ufeh))
-                or (l1mass < 0) or (l1feh < 0)):
-            return False
-        wfeh_lin, ifehs_lin = utils._get_linear_coeffs(np.array([feh]),
-                                                       self.ufeh,
-                                                       np.array([l1feh]))
-        wmass_lin, imasses_lin = utils._get_linear_coeffs(np.array([mass]),
-                                                          self.umass,
-                                                          np.array([l1mass]))
-        if self.spatial_order == 3:
-            wf, ifehs = utils._get_cubic_coeffs(np.array([feh]), self.ufeh,
-                                                np.array([l1feh]))
-            wm, imasses = utils._get_cubic_coeffs(np.array([mass]), self.umass,
-                                                  np.array([l1mass]))
-        i1 = 0
-        i2 = int(
-            np.min(self.valid_eep_max[[l1feh, l1feh, l2feh, l2feh],
-                                      [l1mass, l2mass, l1mass, l2mass]]))
+        if self.grid_ndim == 3:
+            if ((l2mass >= len(self.umass)) or (l2feh >= len(self.ufeh))
+                    or (l1mass < 0) or (l1feh < 0)):
+                return False
+            wfeh_lin, ifehs_lin = utils._get_linear_coeffs(np.array([feh]),
+                                                           self.ufeh,
+                                                           np.array([l1feh]))
+            wmass_lin, imasses_lin = utils._get_linear_coeffs(
+                np.array([mass]), self.umass, np.array([l1mass]))
+            if self.spatial_order == 3:
+                wf, ifehs = utils._get_cubic_coeffs(np.array([feh]), self.ufeh,
+                                                    np.array([l1feh]))
+                wm, imasses = utils._get_cubic_coeffs(np.array([mass]),
+                                                      self.umass,
+                                                      np.array([l1mass]))
+            i2 = int(
+                np.min(self.valid_eep_max[[l1feh, l1feh, l2feh, l2feh],
+                                          [l1mass, l2mass, l1mass, l2mass]]))
+        else:
+            if l1afe is None:
+                l1afe = np.searchsorted(self.uafe, afe) - 1
+            l2afe = l1afe + 1
+            if ((l2mass >= len(self.umass)) or (l2feh >= len(self.ufeh))
+                    or (l2afe >= len(self.uafe)) or (l1mass < 0)
+                    or (l1feh < 0) or (l1afe < 0)):
+                return False
+            wfeh_lin, ifehs_lin = utils._get_linear_coeffs(np.array([feh]),
+                                                           self.ufeh,
+                                                           np.array([l1feh]))
+            wafe_lin, iafes_lin = utils._get_linear_coeffs(np.array([afe]),
+                                                           self.uafe,
+                                                           np.array([l1afe]))
+            wmass_lin, imasses_lin = utils._get_linear_coeffs(
+                np.array([mass]), self.umass, np.array([l1mass]))
+            if self.spatial_order == 3:
+                wf, ifehs = utils._get_cubic_coeffs(np.array([feh]), self.ufeh,
+                                                    np.array([l1feh]))
+                wa, iafes = utils._get_cubic_coeffs(np.array([afe]), self.uafe,
+                                                    np.array([l1afe]))
+                wm, imasses = utils._get_cubic_coeffs(np.array([mass]),
+                                                      self.umass,
+                                                      np.array([l1mass]))
+            inds = list(
+                itertools.product([l1feh, l2feh], [l1afe, l2afe],
+                                  [l1mass, l2mass]))
+            i2 = int(np.min([self.valid_eep_max[i, j, k] for i, j, k in inds]))
         if i2 < 1:
             return False
 
         def getAge(cureep):
             ieep = np.array([cureep], dtype=int)
             if self.spatial_order == 3:
-                val = utils._interpolator_bicubic(self.logage_grid, wf, ifehs,
-                                                  wm, imasses, ieep)[0]
+                if self.grid_ndim == 3:
+                    val = utils._interpolator_bicubic(self.logage_grid, wf,
+                                                      ifehs, wm, imasses,
+                                                      ieep)[0]
+                    for i in range(4):
+                        for j in range(4):
+                            if not np.isfinite(self.logage_grid[ifehs[0, i],
+                                                                imasses[0, j],
+                                                                ieep[0]]):
+                                return _interpolator_2d_eep(
+                                    self.logage_grid, wfeh_lin, ifehs_lin,
+                                    wmass_lin, imasses_lin, ieep)[0]
+                    return val
+                val = utils._interpolator_3d_eep(self.logage_grid, wf, ifehs,
+                                                 wa, iafes, wm, imasses,
+                                                 ieep)[0]
                 for i in range(4):
                     for j in range(4):
-                        if not np.isfinite(
-                                self.logage_grid[ifehs[0, i], imasses[0, j],
-                                                 ieep[0]]):
-                            return _interpolator(
-                                self.logage_grid, wfeh_lin, ifehs_lin,
-                                wmass_lin, imasses_lin, ieep)[0]
+                        for k in range(4):
+                            if not np.isfinite(self.logage_grid[ifehs[0, i],
+                                                                iafes[0, j],
+                                                                imasses[0, k],
+                                                                ieep[0]]):
+                                return utils._interpolator_3d_eep(
+                                    self.logage_grid, wfeh_lin, ifehs_lin,
+                                    wafe_lin, iafes_lin, wmass_lin,
+                                    imasses_lin, ieep)[0]
                 return val
-            return _interpolator(self.logage_grid, wfeh_lin, ifehs_lin,
-                                 wmass_lin, imasses_lin, ieep)[0]
+            if self.grid_ndim == 3:
+                return _interpolator_2d_eep(self.logage_grid, wfeh_lin,
+                                            ifehs_lin, wmass_lin,
+                                            imasses_lin, ieep)[0]
+            return utils._interpolator_3d_eep(self.logage_grid, wfeh_lin,
+                                              ifehs_lin, wafe_lin, iafes_lin,
+                                              wmass_lin, imasses_lin, ieep)[0]
 
-        # check invariants on edges
+        i1 = 0
         if not getAge(i1) <= logage:
             return False
         if (getAge(i2) <= logage):
@@ -867,42 +1179,33 @@ The interpolation is done in two stages:
             elif val > logage:
                 return True
             else:
-                # nan
                 i2 = ix
         if np.isnan(getAge(i2)):
             return False
         return True
 
-    def _getMaxMassBox(self, logage, feh, l1feh, l2feh, l1mass, l2mass):
-        # here we are trying to find linear solutions
-        # inside each EEP,mass,feh box to match our age
-
+    def _getMaxMassBox(self, logage, feh, l1feh, l2feh, l1mass, l2mass, afe=0.0):
+        if self.grid_ndim == 4:
+            raise NotImplementedError('_getMaxMassBox is not implemented for 4D grids')
         x = (feh - self.ufeh[l1feh]) / (self.ufeh[l2feh] - self.ufeh[l1feh])
-        # from 0 to 1
-
         V11 = self.logage_grid[l1feh, l1mass, :]
         V12 = self.logage_grid[l1feh, l2mass, :]
         V21 = self.logage_grid[l2feh, l1mass, :]
         V22 = self.logage_grid[l2feh, l2mass, :]
         with warnings.catch_warnings():
-            # protect against warnings here because we
-            # are actively searching for valid range
             warnings.simplefilter("ignore")
             if x == 0:
                 yy = (logage - V11) / (V12 - V11)
             elif x == 1:
                 yy = (logage - V21) / (V22 - V21)
             else:
-                yy = (logage - V11 * (1 - x) - V21 * x) / ((V12 - V11) * (1 - x) + (V22 - V21) * x)
-                
+                yy = (logage - V11 * (1 - x) - V21 * x) / (
+                    (V12 - V11) * (1 - x) + (V22 - V21) * x)
         yy = yy[np.isfinite(yy) & (yy <= 1) & (yy >= 0)]
         if len(yy) > 0:
             return self.umass[l1mass] + np.nanmax(
                 (self.umass[l2mass] - self.umass[l1mass]) * yy)
-        else:
-            # this likely will happen if only *exactly* the edge
-            # works
-            return np.nan
+        return np.nan
 
 
 class Interpolator:
@@ -926,11 +1229,11 @@ class Interpolator:
         spatial_order: int
             Order of spatial interpolation (1 for linear, 3 for cubic)
         mist_version: str
-            MIST version. This release supports only v1.2.
+            MIST version ("1.2" or "2.5").
         vvcrit: float
             The value of V/Vcrit used for prepared data selection.
         """
-        mist_version = _require_supported_mist_version(mist_version)
+        mist_version = _normalize_mist_version(mist_version)
         if data_prefix is None:
             data_prefix = utils.get_data_path_for_grid(
                 mist_version=mist_version, vvcrit=vvcrit, create=False)
@@ -940,9 +1243,10 @@ class Interpolator:
                                          vvcrit=vvcrit)
         self.bolomInt = bolom.BCInterpolator(data_prefix, filts)
 
-    def __call__(self, mass, logage, feh):
+    def __call__(self, mass, logage, feh, afe=0.0):
         """
-        Compute interpolated isochrone for a given mass log10(age) and feh
+        Compute interpolated isochrone for a given mass log10(age), feh, and
+        optionally [alpha/Fe].
 
         Parameters
         ----------
@@ -952,26 +1256,40 @@ class Interpolator:
             Either scalar or vector of log10(age)
         feh: float/numpy
             Either scalar or vector of [Fe/H]
+        afe: float/numpy
+            Either scalar or vector of [alpha/Fe] (MIST v2.5 only)
 
         """
-        mass, logage, feh = [
-            np.asarray(_, dtype=np.float64) for _ in [mass, logage, feh]
+        mass, logage, feh, afe = [
+            np.asarray(_, dtype=np.float64) for _ in [mass, logage, feh, afe]
         ]
-        mass, logage, feh = np.broadcast_arrays(mass, logage, feh)
+        mass, logage, feh, afe = np.broadcast_arrays(mass, logage, feh, afe)
         shape = mass.shape
-        mass, logage, feh = [np.atleast_1d(_) for _ in [mass, logage, feh]]
+        mass, logage, feh, afe = [
+            np.atleast_1d(_) for _ in [mass, logage, feh, afe]
+        ]
 
-        ret = self.isoInt(mass, logage, feh)
+        ret = self.isoInt(mass, logage, feh, afe)
         good_sub = np.isfinite(ret['logl'])
 
         av = ret['logl'][good_sub] * 0
-        # computing when no extinction
-        arr = np.array([
-            ret['logteff'][good_sub], ret['logg'][good_sub], feh[good_sub], av
-        ]).T
+        if self.bolomInt.ndim == 4:
+            arr = np.array([
+                ret['logteff'][good_sub], ret['logg'][good_sub],
+                feh[good_sub], av
+            ]).T
+        elif self.bolomInt.ndim == 5:
+            arr = np.array([
+                ret['logteff'][good_sub], ret['logg'][good_sub],
+                feh[good_sub], afe[good_sub], av
+            ]).T
+        else:
+            raise RuntimeError(
+                f'Unsupported BC dimensionality: {self.bolomInt.ndim}')
         res0 = self.bolomInt(arr)
         ret['logage'] = logage
         ret['feh'] = feh
+        ret['afe'] = afe
         ret['mass'] = mass
         MBolSun = 4.74
         for k in res0:
@@ -981,9 +1299,9 @@ class Interpolator:
             ret[k] = ret[k].reshape(shape)
         return ret
 
-    def getMaxMass(self, logage, feh):
+    def getMaxMass(self, logage, feh, afe=0.0):
         """ Return the maximum mass on a given isochrone """
-        return self.isoInt.getMaxMass(logage, feh)
+        return self.isoInt.getMaxMass(logage, feh, afe)
 
-    def getMaxMassMS(self, logage, feh):
-        return self.isoInt.getMaxMassMS(logage, feh)
+    def getMaxMassMS(self, logage, feh, afe=0.0):
+        return self.isoInt.getMaxMassMS(logage, feh, afe)

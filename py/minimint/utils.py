@@ -338,6 +338,105 @@ def _interpolator_4d(grid, w0, i0, w1, i1, w2, i2, w3, i3):
     return out
 
 
+@njit(cache=True)
+def _interpolator_3d_eep_numba(grid, w0, i0, w1, i1, w2, i2, ie):
+    n = w0.shape[0]
+    k0 = w0.shape[1]
+    k1 = w1.shape[1]
+    k2 = w2.shape[1]
+    out = np.zeros(n, dtype=np.float64)
+    for t in range(n):
+        e = ie[t]
+        acc = 0.0
+        for a in range(k0):
+            wa = w0[t, a]
+            ia = i0[t, a]
+            for b in range(k1):
+                wab = wa * w1[t, b]
+                ib = i1[t, b]
+                for c in range(k2):
+                    acc += wab * w2[t, c] * grid[ia, ib, i2[t, c], e]
+        out[t] = acc
+    return out
+
+
+def _interpolator_3d_eep(grid, w0, i0, w1, i1, w2, i2, ie):
+    """
+    Interpolate over first three grid axes at fixed fourth-axis indices ie.
+    """
+    ie = np.asarray(ie, dtype=np.int64)
+    if HAS_NUMBA:
+        return _interpolator_3d_eep_numba(grid, w0, i0, w1, i1, w2, i2, ie)
+    n = w0.shape[0]
+    out = np.zeros(n, dtype=np.float64)
+    for a in range(w0.shape[1]):
+        wa = w0[:, a]
+        ia = i0[:, a]
+        for b in range(w1.shape[1]):
+            wab = wa * w1[:, b]
+            ib = i1[:, b]
+            for c in range(w2.shape[1]):
+                out += wab * w2[:, c] * grid[ia, ib, i2[:, c], ie]
+    return out
+
+
+@njit(cache=True)
+def _interpolator_5d_numba(grid, w0, i0, w1, i1, w2, i2, w3, i3, w4, i4):
+    n = w0.shape[0]
+    k0 = w0.shape[1]
+    k1 = w1.shape[1]
+    k2 = w2.shape[1]
+    k3 = w3.shape[1]
+    k4 = w4.shape[1]
+    out = np.zeros(n, dtype=np.float64)
+    for t in range(n):
+        acc = 0.0
+        for a in range(k0):
+            wa = w0[t, a]
+            ia = i0[t, a]
+            for b in range(k1):
+                wab = wa * w1[t, b]
+                ib = i1[t, b]
+                for c in range(k2):
+                    wabc = wab * w2[t, c]
+                    ic = i2[t, c]
+                    for d in range(k3):
+                        wabcd = wabc * w3[t, d]
+                        id0 = i3[t, d]
+                        for e in range(k4):
+                            acc += wabcd * w4[t, e] * grid[ia, ib, ic, id0,
+                                                            i4[t, e]]
+        out[t] = acc
+    return out
+
+
+def _interpolator_5d(grid, w0, i0, w1, i1, w2, i2, w3, i3, w4, i4):
+    """
+    Generic 5D tensor-product interpolation.
+    """
+    if HAS_NUMBA:
+        return _interpolator_5d_numba(grid, w0, i0, w1, i1, w2, i2, w3, i3,
+                                      w4, i4)
+    n = w0.shape[0]
+    out = np.zeros(n, dtype=np.float64)
+    for a in range(w0.shape[1]):
+        wa = w0[:, a]
+        ia = i0[:, a]
+        for b in range(w1.shape[1]):
+            wab = wa * w1[:, b]
+            ib = i1[:, b]
+            for c in range(w2.shape[1]):
+                wabc = wab * w2[:, c]
+                ic = i2[:, c]
+                for d in range(w3.shape[1]):
+                    wabcd = wabc * w3[:, d]
+                    id0 = i3[:, d]
+                    for e in range(w4.shape[1]):
+                        out += wabcd * w4[:, e] * grid[ia, ib, ic, id0,
+                                                        i4[:, e]]
+    return out
+
+
 def steffen_interp(y_m1, y_0, y_1, y_2, t):
     """
     Vectorized piecewise-monotonic cubic interpolation (Steffen 1990).

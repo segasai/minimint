@@ -2,10 +2,11 @@ import glob
 import itertools
 import re
 import os
+import tempfile
 import astropy.table as atpy
 import numpy as np
 from .utils import (get_data_path, get_data_path_for_grid, tail_head,
-                    _get_cubic_coeffs, _interpolator_4d)
+                    _get_cubic_coeffs, _interpolator_4d, _interpolator_5d)
 
 POINTS_NPY = 'bolom_points.npy'
 FILT_NPY = 'filt_%s.npy'
@@ -17,6 +18,45 @@ def _interpolator_4cubic(grid, ws, idxs):
     """
     return _interpolator_4d(grid, ws[0], idxs[0], ws[1], idxs[1], ws[2],
                             idxs[2], ws[3], idxs[3])
+
+
+def _interpolator_5cubic(grid, ws, idxs):
+    """
+    Perform 5D cubic interpolation for bolometric corrections.
+    """
+    return _interpolator_5d(grid, ws[0], idxs[0], ws[1], idxs[1], ws[2],
+                            idxs[2], ws[3], idxs[3], ws[4], idxs[4])
+
+
+def _header_preview_file(fin, nout=10):
+    """
+    Create a temporary file starting from the detected header line.
+    Supports both v1.2 and v2.5 BC table formats.
+    """
+    fp = open(fin, 'r')
+    lines = []
+    for i, ll in enumerate(fp):
+        lines.append(ll)
+        if i > 200:
+            break
+    fp.close()
+
+    header_idx = None
+    for i, ll in enumerate(lines):
+        lls = ll.strip()
+        if not lls.startswith('#'):
+            continue
+        if ('Teff' in lls) or ('lgTef' in lls) or ('logT' in lls):
+            header_idx = i
+            break
+    if header_idx is None:
+        return tail_head(fin, 5, nout)
+
+    fpout = tempfile.NamedTemporaryFile(delete=False, mode='w')
+    for ll in lines[header_idx:header_idx + nout + 1]:
+        print(ll, file=fpout, end='')
+    fpout.close()
+    return fpout.name
 
 
 def read_bolom(filt, iprefix):
@@ -37,14 +77,16 @@ def read_bolom(filt, iprefix):
         raise RuntimeError(
             'Filter system %s bolometric correction not found in %s' %
             (filt, iprefix))
-    tmpfile = tail_head(fs[0], 5, 10)
+    tmpfile = _header_preview_file(fs[0], 10)
     tab0 = atpy.Table().read(tmpfile, format='ascii.fast_commented_header')
     os.unlink(tmpfile)
     tabs = []
+    colnames = list(tab0.columns)
     for f in fs:
-        curt = atpy.Table().read(f, format='ascii')
-        for i, k in enumerate(list(curt.columns)):
-            curt.rename_column(k, list(tab0.columns)[i])
+        curt = atpy.Table().read(f,
+                                 format='ascii.basic',
+                                 names=colnames,
+                                 comment='#')
         tabs.append(curt)
 
     tabs = atpy.vstack(tabs)
@@ -56,7 +98,7 @@ class BCInterpolator:
     def __init__(self, prefix, filts):
         filts = set(filts)
         vec = np.load(prefix + '/' + POINTS_NPY)
-        ndim = 4
+        ndim = vec.shape[0]
         self.ndim = ndim
         uids = [np.unique(vec[i, :], return_inverse=True) for i in range(ndim)]
         self.uvecs = [uids[_][0] for _ in range(ndim)]
@@ -88,14 +130,22 @@ class BCInterpolator:
         ws = []
         idxs = []
         for i in range(self.ndim):
-            pos = np.searchsorted(self.uvecs[i], p[:, i], 'right') - 1
+            p_dim = p[:, i]
+            if i == 2:
+                p_dim = np.maximum(p_dim, self.uvecs[i][0])
+            pos = np.searchsorted(self.uvecs[i], p_dim, 'right') - 1
             bad = bad | (pos < 0) | (pos >= (len(self.uvecs[i]) - 1))
             pos_clipped = np.clip(pos, 0, len(self.uvecs[i]) - 2)
-            w, idx = _get_cubic_coeffs(p[:, i], self.uvecs[i], pos_clipped)
+            w, idx = _get_cubic_coeffs(p_dim, self.uvecs[i], pos_clipped)
             ws.append(w)
             idxs.append(idx)
         for f in self.filts:
-            curres = _interpolator_4cubic(self.dats[f], ws, idxs)
+            if self.ndim == 4:
+                curres = _interpolator_4cubic(self.dats[f], ws, idxs)
+            elif self.ndim == 5:
+                curres = _interpolator_5cubic(self.dats[f], ws, idxs)
+            else:
+                raise RuntimeError(f'Unsupported BC dimensionality: {self.ndim}')
             res[f] = curres
             res[f][bad] = np.nan
         return res
@@ -126,12 +176,20 @@ def prepare(iprefix,
             oprefix,
             filters=('SDSSugriz', 'SkyMapper', 'UBVRIplus', 'DECam', 'WISE',
                      'GALEX')):
-    cols_ex = ['Teff', 'logg', '[Fe/H]', 'Av', 'Rv']
+    cols_ex = ['Teff', 'logg', '[Fe/H]', 'Av', 'Rv', 'lgTef', 'Fe_H', 'a_Fe']
     last_vec = None
     for i, filt in enumerate(filters):
         tabs = read_bolom(filt, iprefix)
-        vec = np.array(
-            [np.log10(tabs['Teff']), tabs['logg'], tabs['[Fe/H]'], tabs['Av']])
+        if 'Teff' in tabs.colnames:
+            vec = np.array(
+                [np.log10(tabs['Teff']), tabs['logg'], tabs['[Fe/H]'],
+                 tabs['Av']])
+        elif 'lgTef' in tabs.colnames:
+            vec = np.array(
+                [tabs['lgTef'], tabs['logg'], tabs['Fe_H'], tabs['a_Fe'],
+                 tabs['Av']])
+        else:
+            raise RuntimeError('Unrecognized BC table columns')
         if last_vec is not None and (last_vec != vec).sum() > 0:
             raise Exception("shouldn't happen")
         last_vec = vec.copy()

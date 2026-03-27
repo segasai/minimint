@@ -34,7 +34,152 @@ def test_grid_path_helper(tmp_path, monkeypatch):
 
 def test_unsupported_version_rejected():
     with pytest.raises(ValueError):
-        minimint.Interpolator(['DECam_g'], mist_version='2.5')
+        minimint.Interpolator(['DECam_g'], mist_version='9.9')
+
+
+def test_v25_alpha_synthetic(tmp_path):
+    from minimint.mist_interpolator import INTERP_NPZ, VALID_EEP_MAX_NPY, get_file
+    from minimint.bolom import POINTS_NPY, FILT_NPY
+
+    umass = np.array([0.8, 1.2, 1.6])
+    ufeh = np.array([0.0, 0.5])
+    uafe = np.array([0.4, 0.6])
+    neep = 6
+
+    shape = (len(ufeh), len(uafe), len(umass), neep)
+    ii, jj, kk, ee = np.indices(shape)
+    logage = 7.0 + 0.12 * ii + 0.08 * jj + 0.09 * kk + 0.15 * ee
+    logteff = 3.6 + 0.02 * ii + 0.01 * jj + 0.03 * kk + 0.005 * ee
+    logg = 4.7 - 0.05 * kk + 0.01 * ii + 0.01 * jj + 0.01 * ee
+    logl = -0.1 + 0.2 * ii + 0.12 * jj + 0.2 * kk + 0.05 * ee
+    phase = np.round(0.2 * ee).astype(np.int8)
+
+    # Missing MIST 2.5 corner: feh=0.5, afe=0.6
+    logage[1, 1, :, :] = np.nan
+    logteff[1, 1, :, :] = np.nan
+    logg[1, 1, :, :] = np.nan
+    logl[1, 1, :, :] = np.nan
+    phase = phase.astype(float)
+    phase[1, 1, :, :] = np.nan
+    # Mimic prepare()-time fill for the missing slab.
+    logage[1, 1, :, :] = logage[1, 0, :, :]
+    logteff[1, 1, :, :] = logteff[1, 0, :, :]
+    logg[1, 1, :, :] = logg[1, 0, :, :]
+    logl[1, 1, :, :] = logl[1, 0, :, :]
+    phase[1, 1, :, :] = phase[1, 0, :, :]
+
+    np.save(tmp_path / get_file('logage'), logage)
+    np.save(tmp_path / get_file('logteff'), logteff)
+    np.save(tmp_path / get_file('logg'), logg)
+    np.save(tmp_path / get_file('logl'), logl)
+    np.save(tmp_path / get_file('phase'), np.nan_to_num(phase, nan=-99).astype(np.int8))
+
+    valid_eep_max = np.full((len(ufeh), len(uafe), len(umass)), neep - 1,
+                            dtype=np.int16)
+    np.save(tmp_path / VALID_EEP_MAX_NPY, valid_eep_max)
+    np.savez(tmp_path / INTERP_NPZ,
+             umass=umass,
+             ufeh=ufeh,
+             uafe=uafe,
+             neep=neep,
+             grid_ndim=4,
+             mist_version='2.5',
+             vvcrit=0.4)
+
+    u0 = np.array([3.50, 3.70, 3.90])
+    u1 = np.array([3.50, 4.00, 5.00])
+    u2 = np.array([0.0, 0.5])
+    u3 = np.array([0.4, 0.6])
+    u4 = np.array([0.0, 0.5, 1.0])
+    g0, g1, g2, g3, g4 = np.meshgrid(u0, u1, u2, u3, u4, indexing='ij')
+    vec = np.array([g0.ravel(), g1.ravel(), g2.ravel(), g3.ravel(), g4.ravel()])
+    bc = (0.5 * g0 + 0.2 * g1 + 0.3 * g2 + 0.4 * g3 + 0.1 * g4).ravel()
+    np.save(tmp_path / POINTS_NPY, vec)
+    np.save(tmp_path / (FILT_NPY % 'TEST_F'), bc)
+
+    ii = minimint.Interpolator(['TEST_F'],
+                               data_prefix=str(tmp_path),
+                               spatial_order=3,
+                               mist_version='2.5')
+    out = ii(1.05, 7.7, 0.45, afe=0.55)
+    assert np.isfinite(out['TEST_F'])
+    assert np.isfinite(out['logl'])
+    age = ii.isoInt.getLogAgeFromEEP(np.array([1.05]), np.array([2.4]),
+                                     np.array([0.45]), afe=np.array([0.55]))
+    assert np.isfinite(age[0])
+
+
+def test_patch_known_bad_track_helper():
+    from minimint.mist_interpolator import (_patch_known_bad_track,
+                                            _is_substellar_lowmass_track)
+    ufeh = np.array([-2.0, -1.5])
+    uafe = np.array([0.0, 0.2, 0.4])
+    umass = np.array([0.1, 0.15, 0.2])
+    neep = 8
+    g = np.zeros((len(ufeh), len(uafe), len(umass), neep)) + np.nan
+
+    fi, ai0, ai2, ai4, mi = 0, 0, 1, 2, 0
+    e = np.arange(neep, dtype=float)
+    g[fi, ai0, mi, :] = 8.0 + 0.01 * e
+    g[fi, ai4, mi, :] = 8.2 + 0.01 * e
+    g[fi, ai2, mi, :] = np.nan
+    # keep neighboring mass finite for fallback safety
+    g[fi, ai2, mi + 1, :] = 8.1 + 0.01 * e
+
+    changed = _patch_known_bad_track(g, ufeh, uafe, umass, 'logage')
+    assert changed
+    out = g[fi, ai2, mi, :]
+    np.testing.assert_allclose(out, 8.1 + 0.01 * e, rtol=0, atol=1e-12)
+    assert np.all(np.diff(out) >= 0)
+    assert _is_substellar_lowmass_track('substellar', 0.1)
+    assert not _is_substellar_lowmass_track('low-mass', 0.1)
+
+
+def test_cubic_fallback_subset_indexing_regression():
+    from minimint.mist_interpolator import TheoryInterpolator
+
+    ti = TheoryInterpolator.__new__(TheoryInterpolator)
+    ti.spatial_order = 3
+    ti.grid_ndim = 3
+
+    # 3 points in DD, but we'll evaluate only subset=[1,2].
+    # Point 0 has very different linear coefficients so wrong local-index
+    # mapping would contaminate results.
+    DD = dict(
+        wfeh_lin=np.array([[1.0, 0.0], [0.8, 0.2], [0.7, 0.3]]),
+        ifehs_lin=np.array([[0, 1], [0, 1], [0, 1]], dtype=int),
+        wmass_lin=np.array([[1.0, 0.0], [0.9, 0.1], [0.85, 0.15]]),
+        imasses_lin=np.array([[0, 1], [0, 1], [0, 1]], dtype=int),
+        wf=np.array([
+            [1.0, 0.0, 0.0, 0.0],
+            [0.7, 0.3, 0.0, 0.0],
+            [0.6, 0.4, 0.0, 0.0],
+        ]),
+        ifehs=np.array([[0, 1, 2, 3], [0, 1, 2, 3], [0, 1, 2, 3]], dtype=int),
+        wm=np.array([
+            [1.0, 0.0, 0.0, 0.0],
+            [0.8, 0.2, 0.0, 0.0],
+            [0.75, 0.25, 0.0, 0.0],
+        ]),
+        imasses=np.array([[0, 1, 2, 3], [0, 1, 2, 3], [0, 1, 2, 3]],
+                         dtype=int),
+    )
+
+    # Grid has one NaN in cubic footprint to force fallback.
+    grid = np.zeros((4, 4, 1), dtype=float)
+    grid[0, 0, 0] = 100.0
+    grid[0, 1, 0] = 100.0
+    grid[1, 0, 0] = 50.0
+    grid[1, 1, 0] = 50.0
+    grid[2, 2, 0] = np.nan
+
+    subset = np.array([1, 2], dtype=int)
+    ieep = np.array([0, 0], dtype=int)
+
+    got = ti._eval_spatial_interp(grid, DD, ieep, subset=subset,
+                                  use_cubic=True)
+    exp = ti._eval_linear_interp(grid, DD, ieep, subset=subset)
+    np.testing.assert_allclose(got, exp, rtol=0, atol=1e-12)
 
 
 def test_example():
@@ -177,6 +322,32 @@ def test_numba_dispatch_parity():
         y_np = mm_utils._interpolator_4d(grid4, w0, i0, w1, i1, w2, i2, w3, i3)
         mm_utils.HAS_NUMBA = True
         y_nb = mm_utils._interpolator_4d(grid4, w0, i0, w1, i1, w2, i2, w3, i3)
+        np.testing.assert_allclose(y_np, y_nb, rtol=1e-12, atol=1e-12)
+
+        # 5D kernel parity
+        grid5 = rng.normal(size=(6, 7, 8, 5, 4))
+        i0 = rng.integers(0, 6, size=(n, 4))
+        i1 = rng.integers(0, 7, size=(n, 4))
+        i2 = rng.integers(0, 8, size=(n, 4))
+        i3 = rng.integers(0, 5, size=(n, 4))
+        i4 = rng.integers(0, 4, size=(n, 4))
+        w0 = rng.random((n, 4))
+        w1 = rng.random((n, 4))
+        w2 = rng.random((n, 4))
+        w3 = rng.random((n, 4))
+        w4 = rng.random((n, 4))
+        w0 /= w0.sum(axis=1, keepdims=True)
+        w1 /= w1.sum(axis=1, keepdims=True)
+        w2 /= w2.sum(axis=1, keepdims=True)
+        w3 /= w3.sum(axis=1, keepdims=True)
+        w4 /= w4.sum(axis=1, keepdims=True)
+
+        mm_utils.HAS_NUMBA = False
+        y_np = mm_utils._interpolator_5d(grid5, w0, i0, w1, i1, w2, i2, w3, i3,
+                                         w4, i4)
+        mm_utils.HAS_NUMBA = True
+        y_nb = mm_utils._interpolator_5d(grid5, w0, i0, w1, i1, w2, i2, w3, i3,
+                                         w4, i4)
         np.testing.assert_allclose(y_np, y_nb, rtol=1e-12, atol=1e-12)
 
         # End-to-end parity (small sample)

@@ -109,6 +109,68 @@ def test_v25_alpha_synthetic(tmp_path):
     assert np.isfinite(age[0])
 
 
+def test_v25_tiny_download_prepare_and_run(tmp_path):
+    def _has_finite_output(ii):
+        for ifeh, feh in enumerate(ii.isoInt.ufeh):
+            for iafe, afe in enumerate(ii.isoInt.uafe):
+                for imass, mass in enumerate(ii.isoInt.umass):
+                    max_eep = int(ii.isoInt.valid_eep_max[ifeh, iafe, imass])
+                    if max_eep <= 1:
+                        continue
+                    for ieep in np.linspace(1,
+                                            max_eep,
+                                            num=min(8, max_eep),
+                                            dtype=int):
+                        logage = np.float64(ii.isoInt.logage_grid[ifeh, iafe,
+                                                                   imass, ieep])
+                        if not np.isfinite(logage):
+                            continue
+                        out = ii(np.float64(mass),
+                                 logage,
+                                 np.float64(feh),
+                                 afe=np.float64(afe))
+                        if (np.isfinite(out['DECam_g'])
+                                and np.isfinite(out['DECam_r'])
+                                and np.isfinite(out['logteff'])
+                                and np.isfinite(out['logg'])
+                                and np.isfinite(out['logl'])):
+                            return True
+        return False
+
+    if os.environ.get('LOCAL_TESTING') is not None:
+        data_prefix = os.environ.get('MINIMINT_DATA_PATH')
+        try:
+            ii_lin = minimint.Interpolator(['DECam_g', 'DECam_r'],
+                                           data_prefix=data_prefix,
+                                           mist_version='2.5',
+                                           spatial_order=1)
+            ii_cub = minimint.Interpolator(['DECam_g', 'DECam_r'],
+                                           data_prefix=data_prefix,
+                                           mist_version='2.5',
+                                           spatial_order=3)
+        except FileNotFoundError:
+            pytest.skip('LOCAL_TESTING mode: reusing local data, but v2.5 grid is not available')
+    else:
+        outdir = tmp_path / 'mist25_tiny'
+        minimint.download_and_prepare(filters=['DECam'],
+                                      outp_prefix=str(outdir),
+                                      mist_version='2.5',
+                                      vvcrit=0.4,
+                                      feh_values=[0.0, 0.25, 0.5],
+                                      afe_values=[0.2, 0.4, 0.6])
+        ii_lin = minimint.Interpolator(['DECam_g', 'DECam_r'],
+                                       data_prefix=str(outdir),
+                                       mist_version='2.5',
+                                       spatial_order=1)
+        ii_cub = minimint.Interpolator(['DECam_g', 'DECam_r'],
+                                       data_prefix=str(outdir),
+                                       mist_version='2.5',
+                                       spatial_order=3)
+
+    assert _has_finite_output(ii_lin)
+    assert _has_finite_output(ii_cub)
+
+
 def test_patch_known_bad_track_helper():
     from minimint.mist_interpolator import (_patch_known_bad_track,
                                             _is_substellar_lowmass_track)

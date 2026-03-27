@@ -754,26 +754,21 @@ class TheoryInterpolator:
         l1feh[bads] = 0
         l2feh[bads] = 1
 
-        wfeh_lin, ifehs_lin = utils._get_linear_coeffs(feh, self.ufeh, l1feh)
-        wmass_lin, imasses_lin = utils._get_linear_coeffs(mass, self.umass,
-                                                          l1mass)
-        if self.grid_ndim == 4:
-            wafe_lin, iafes_lin = utils._get_linear_coeffs(afe, self.uafe,
-                                                           l1afe)
-
-        wf = ifehs = wm = imasses = wa = iafes = None
-        if self.spatial_order == 3:
-            wf, ifehs = utils._get_cubic_coeffs(feh, self.ufeh, l1feh)
-            wm, imasses = utils._get_cubic_coeffs(mass, self.umass, l1mass)
-            if self.grid_ndim == 4:
-                wa, iafes = utils._get_cubic_coeffs(afe, self.uafe, l1afe)
-
-        def getAge(cureep_vec, subset):
-            if np.isscalar(cureep_vec):
-                cureep_vec = np.full(len(subset), float(cureep_vec))
-            ieep = np.asarray(cureep_vec, dtype=int)
+        if self.grid_ndim == 3:
+            wfeh_lin, ifehs_lin = utils._get_linear_coeffs(feh, self.ufeh,
+                                                           l1feh)
+            wmass_lin, imasses_lin = utils._get_linear_coeffs(
+                mass, self.umass, l1mass)
+            wf = ifehs = wm = imasses = None
             if self.spatial_order == 3:
-                if self.grid_ndim == 3:
+                wf, ifehs = utils._get_cubic_coeffs(feh, self.ufeh, l1feh)
+                wm, imasses = utils._get_cubic_coeffs(mass, self.umass, l1mass)
+
+            def getAge(cureep_vec, subset):
+                if np.isscalar(cureep_vec):
+                    cureep_vec = np.full(len(subset), float(cureep_vec))
+                ieep = np.asarray(cureep_vec, dtype=int)
+                if self.spatial_order == 3:
                     res = utils._interpolator_bicubic(
                         self.logage_grid, wf[subset], ifehs[subset],
                         wm[subset], imasses[subset], ieep)
@@ -783,7 +778,34 @@ class TheoryInterpolator:
                             bad |= ~np.isfinite(
                                 self.logage_grid[ifehs[subset, i],
                                                  imasses[subset, j], ieep])
-                else:
+                    if bad.any():
+                        res[bad] = _interpolator_2d_eep(
+                            self.logage_grid, wfeh_lin[subset][bad],
+                            ifehs_lin[subset][bad], wmass_lin[subset][bad],
+                            imasses_lin[subset][bad], ieep[bad])
+                    return res
+                return _interpolator_2d_eep(self.logage_grid, wfeh_lin[subset],
+                                            ifehs_lin[subset],
+                                            wmass_lin[subset],
+                                            imasses_lin[subset], ieep)
+        else:
+            wfeh_lin, ifehs_lin = utils._get_linear_coeffs(feh, self.ufeh,
+                                                           l1feh)
+            wafe_lin, iafes_lin = utils._get_linear_coeffs(afe, self.uafe,
+                                                           l1afe)
+            wmass_lin, imasses_lin = utils._get_linear_coeffs(
+                mass, self.umass, l1mass)
+            wf = ifehs = wa = iafes = wm = imasses = None
+            if self.spatial_order == 3:
+                wf, ifehs = utils._get_cubic_coeffs(feh, self.ufeh, l1feh)
+                wa, iafes = utils._get_cubic_coeffs(afe, self.uafe, l1afe)
+                wm, imasses = utils._get_cubic_coeffs(mass, self.umass, l1mass)
+
+            def getAge(cureep_vec, subset):
+                if np.isscalar(cureep_vec):
+                    cureep_vec = np.full(len(subset), float(cureep_vec))
+                ieep = np.asarray(cureep_vec, dtype=int)
+                if self.spatial_order == 3:
                     res = utils._interpolator_3d_eep(
                         self.logage_grid, wf[subset], ifehs[subset],
                         wa[subset], iafes[subset], wm[subset],
@@ -796,31 +818,20 @@ class TheoryInterpolator:
                                     self.logage_grid[ifehs[subset, i],
                                                      iafes[subset, j],
                                                      imasses[subset, k], ieep])
-                if bad.any():
-                    if self.grid_ndim == 3:
-                        res[bad] = _interpolator_2d_eep(
-                            self.logage_grid, wfeh_lin[subset][bad],
-                            ifehs_lin[subset][bad], wmass_lin[subset][bad],
-                            imasses_lin[subset][bad], ieep[bad])
-                    else:
+                    if bad.any():
                         res[bad] = utils._interpolator_3d_eep(
                             self.logage_grid, wfeh_lin[subset][bad],
                             ifehs_lin[subset][bad], wafe_lin[subset][bad],
                             iafes_lin[subset][bad], wmass_lin[subset][bad],
                             imasses_lin[subset][bad], ieep[bad])
-                return res
-            if self.grid_ndim == 3:
-                return _interpolator_2d_eep(self.logage_grid, wfeh_lin[subset],
-                                            ifehs_lin[subset],
-                                            wmass_lin[subset],
-                                            imasses_lin[subset], ieep)
-            return utils._interpolator_3d_eep(self.logage_grid,
-                                              wfeh_lin[subset],
-                                              ifehs_lin[subset],
-                                              wafe_lin[subset],
-                                              iafes_lin[subset],
-                                              wmass_lin[subset],
-                                              imasses_lin[subset], ieep)
+                    return res
+                return utils._interpolator_3d_eep(self.logage_grid,
+                                                  wfeh_lin[subset],
+                                                  ifehs_lin[subset],
+                                                  wafe_lin[subset],
+                                                  iafes_lin[subset],
+                                                  wmass_lin[subset],
+                                                  imasses_lin[subset], ieep)
 
         lefts, rights, bads = _binary_search(bads, logage, self.neep, getAge)
         eep_frac = np.zeros(len(mass))
@@ -1084,6 +1095,7 @@ class TheoryInterpolator:
                                                            np.array([l1feh]))
             wmass_lin, imasses_lin = utils._get_linear_coeffs(
                 np.array([mass]), self.umass, np.array([l1mass]))
+            wf = ifehs = wm = imasses = None
             if self.spatial_order == 3:
                 wf, ifehs = utils._get_cubic_coeffs(np.array([feh]), self.ufeh,
                                                     np.array([l1feh]))
@@ -1093,6 +1105,25 @@ class TheoryInterpolator:
             i2 = int(
                 np.min(self.valid_eep_max[[l1feh, l1feh, l2feh, l2feh],
                                           [l1mass, l2mass, l1mass, l2mass]]))
+
+            def getAge(cureep):
+                ieep = np.array([cureep], dtype=int)
+                if self.spatial_order == 3:
+                    val = utils._interpolator_bicubic(self.logage_grid, wf,
+                                                      ifehs, wm, imasses,
+                                                      ieep)[0]
+                    for i in range(4):
+                        for j in range(4):
+                            if not np.isfinite(self.logage_grid[ifehs[0, i],
+                                                                imasses[0, j],
+                                                                ieep[0]]):
+                                return _interpolator_2d_eep(
+                                    self.logage_grid, wfeh_lin, ifehs_lin,
+                                    wmass_lin, imasses_lin, ieep)[0]
+                    return val
+                return _interpolator_2d_eep(self.logage_grid, wfeh_lin,
+                                            ifehs_lin, wmass_lin,
+                                            imasses_lin, ieep)[0]
         else:
             if l1afe is None:
                 l1afe = np.searchsorted(self.uafe, afe) - 1
@@ -1109,6 +1140,7 @@ class TheoryInterpolator:
                                                            np.array([l1afe]))
             wmass_lin, imasses_lin = utils._get_linear_coeffs(
                 np.array([mass]), self.umass, np.array([l1mass]))
+            wf = ifehs = wa = iafes = wm = imasses = None
             if self.spatial_order == 3:
                 wf, ifehs = utils._get_cubic_coeffs(np.array([feh]), self.ufeh,
                                                     np.array([l1feh]))
@@ -1121,47 +1153,33 @@ class TheoryInterpolator:
                 itertools.product([l1feh, l2feh], [l1afe, l2afe],
                                   [l1mass, l2mass]))
             i2 = int(np.min([self.valid_eep_max[i, j, k] for i, j, k in inds]))
-        if i2 < 1:
-            return False
 
-        def getAge(cureep):
-            ieep = np.array([cureep], dtype=int)
-            if self.spatial_order == 3:
-                if self.grid_ndim == 3:
-                    val = utils._interpolator_bicubic(self.logage_grid, wf,
-                                                      ifehs, wm, imasses,
-                                                      ieep)[0]
+            def getAge(cureep):
+                ieep = np.array([cureep], dtype=int)
+                if self.spatial_order == 3:
+                    val = utils._interpolator_3d_eep(self.logage_grid, wf,
+                                                     ifehs, wa, iafes, wm,
+                                                     imasses, ieep)[0]
                     for i in range(4):
                         for j in range(4):
-                            if not np.isfinite(self.logage_grid[ifehs[0, i],
-                                                                imasses[0, j],
-                                                                ieep[0]]):
-                                return _interpolator_2d_eep(
-                                    self.logage_grid, wfeh_lin, ifehs_lin,
-                                    wmass_lin, imasses_lin, ieep)[0]
+                            for k in range(4):
+                                if not np.isfinite(
+                                        self.logage_grid[ifehs[0, i],
+                                                         iafes[0, j],
+                                                         imasses[0, k],
+                                                         ieep[0]]):
+                                    return utils._interpolator_3d_eep(
+                                        self.logage_grid, wfeh_lin, ifehs_lin,
+                                        wafe_lin, iafes_lin, wmass_lin,
+                                        imasses_lin, ieep)[0]
                     return val
-                val = utils._interpolator_3d_eep(self.logage_grid, wf, ifehs,
-                                                 wa, iafes, wm, imasses,
-                                                 ieep)[0]
-                for i in range(4):
-                    for j in range(4):
-                        for k in range(4):
-                            if not np.isfinite(self.logage_grid[ifehs[0, i],
-                                                                iafes[0, j],
-                                                                imasses[0, k],
-                                                                ieep[0]]):
-                                return utils._interpolator_3d_eep(
-                                    self.logage_grid, wfeh_lin, ifehs_lin,
-                                    wafe_lin, iafes_lin, wmass_lin,
-                                    imasses_lin, ieep)[0]
-                return val
-            if self.grid_ndim == 3:
-                return _interpolator_2d_eep(self.logage_grid, wfeh_lin,
-                                            ifehs_lin, wmass_lin,
-                                            imasses_lin, ieep)[0]
-            return utils._interpolator_3d_eep(self.logage_grid, wfeh_lin,
-                                              ifehs_lin, wafe_lin, iafes_lin,
-                                              wmass_lin, imasses_lin, ieep)[0]
+                return utils._interpolator_3d_eep(self.logage_grid, wfeh_lin,
+                                                  ifehs_lin, wafe_lin,
+                                                  iafes_lin, wmass_lin,
+                                                  imasses_lin, ieep)[0]
+
+        if i2 < 1:
+            return False
 
         i1 = 0
         if not getAge(i1) <= logage:

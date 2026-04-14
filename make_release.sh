@@ -10,7 +10,7 @@ git tag $VERSION
 echo "preparing the pypi package"
 rm -rf dist/* build/*
 TMPDIR=`mktemp -d`
-cp -r * $TMPDIR
+cp -r * .git $TMPDIR
 cd $TMPDIR/
 python -m build --sdist --wheel
 twine check dist/*

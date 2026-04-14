@@ -462,7 +462,7 @@ def download_and_prepare(filters=[
                          bc_only=False,
                          feh_values=None,
                          afe_values=None):
-    """ Download the MIST isochrones and prepare the prerocessed isochrones
+    """ Download the MIST isochrones and prepare the preprocessed isochrones
     Parameters
 
     ----------
@@ -503,7 +503,7 @@ def download_and_prepare(filters=[
         urls = get_bc_urls(filters, mist_version=mist_version)
         if not bc_only:
             if mist_version == '2.5':
-                print('WARNING the temporary size of the downloaded'
+                print('WARNING the temporary size of the downloaded '
                       'tracks for the full grid is ~ 100 GB')
             urls = urls + get_eep_urls(feh_values=feh_values,
                                        afe_values=afe_values,
@@ -667,12 +667,12 @@ def prepare(eep_prefix,
 
 def _binary_search(bads, logage, neep, getAge):
     """
-    Peform a binary search on a grid to find pts
+    Perform a binary search on a grid to find pts
     such as getAge(pt)<logage<getAge(pt+1)
 
     Returns:
     lefts:
-    rigths:
+    rights:
     bads:
     """
     # This will be our working subset

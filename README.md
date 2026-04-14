@@ -4,14 +4,14 @@
 
 # Minimint (MIni Mist INTerpolation)
 
-This is a python package to perform interpolation of MIST (v1.2 and alpha-enriched v2.5) isochrones. It is simple, in the sense that it only does one thing - predict the stellar parameters ($\log g$, $T_{eff}$, $\log L$) and photometry in a given filter for a given mass, age and metallicity. It is also vectorized, so computing photometry for large number of stars, should not be slow.
+This is a python package to perform interpolation of MIST (v1.2 and alpha-enriched v2.5) isochrones. It is simple, in the sense that it only does one thing - predict the stellar parameters ($\log g$, $T_{eff}$, $\log L$) and photometry in a given filter for a given mass, age and metallicity. It is also vectorized, so computing photometry for a large number of stars should not be slow.
 
 Author: Sergey Koposov (2020-2025) skoposov __AT__ ed __DOT__ ac __DOT__ uk
 
 ## Instructions 
 
 * Install minimint. You can either pip install the released version or install from github. Currently the version supporting the MIST 2.5 isochrones is
-only available on github, but not yest through pypi. 
+only available on github, but not yet through pypi. 
 
 ```
 pip install minimint
@@ -88,7 +88,7 @@ minimint.prepare(
 
 ## Usage 
 
-In order to create an interpolator object for two filters (your can provide a list of any numbers of filters)
+In order to create an interpolator object for two filters (you can provide a list of any number of filters)
 
 ```ii = minimint.Interpolator(['DECam_g','DECam_r'])```
 

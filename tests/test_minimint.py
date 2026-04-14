@@ -5,11 +5,12 @@ import pytest
 from minimint import utils as mm_utils
 
 
-def test_install():
+def test_small_install_v12():
     if os.environ.get('LOCAL_TESTING') is not None:
         pass
     else:
-        minimint.download_and_prepare()
+        minimint.download_and_prepare(feh_values=[-4, -3, -1, 0],
+                                      filters=['DEcam', 'WISE', 'SkyMapper'])
 
 
 def test_run():
@@ -72,9 +73,11 @@ def test_v25_alpha_synthetic(tmp_path):
     np.save(tmp_path / get_file('logteff'), logteff)
     np.save(tmp_path / get_file('logg'), logg)
     np.save(tmp_path / get_file('logl'), logl)
-    np.save(tmp_path / get_file('phase'), np.nan_to_num(phase, nan=-99).astype(np.int8))
+    np.save(tmp_path / get_file('phase'),
+            np.nan_to_num(phase, nan=-99).astype(np.int8))
 
-    valid_eep_max = np.full((len(ufeh), len(uafe), len(umass)), neep - 1,
+    valid_eep_max = np.full((len(ufeh), len(uafe), len(umass)),
+                            neep - 1,
                             dtype=np.int16)
     np.save(tmp_path / VALID_EEP_MAX_NPY, valid_eep_max)
     np.savez(tmp_path / INTERP_NPZ,
@@ -92,7 +95,12 @@ def test_v25_alpha_synthetic(tmp_path):
     u3 = np.array([0.4, 0.6])
     u4 = np.array([0.0, 0.5, 1.0])
     g0, g1, g2, g3, g4 = np.meshgrid(u0, u1, u2, u3, u4, indexing='ij')
-    vec = np.array([g0.ravel(), g1.ravel(), g2.ravel(), g3.ravel(), g4.ravel()])
+    vec = np.array(
+        [g0.ravel(),
+         g1.ravel(),
+         g2.ravel(),
+         g3.ravel(),
+         g4.ravel()])
     bc = (0.5 * g0 + 0.2 * g1 + 0.3 * g2 + 0.4 * g3 + 0.1 * g4).ravel()
     np.save(tmp_path / POINTS_NPY, vec)
     np.save(tmp_path / (FILT_NPY % 'TEST_F'), bc)
@@ -104,12 +112,15 @@ def test_v25_alpha_synthetic(tmp_path):
     out = ii(1.05, 7.7, 0.45, afe=0.55)
     assert np.isfinite(out['TEST_F'])
     assert np.isfinite(out['logl'])
-    age = ii.isoInt.getLogAgeFromEEP(np.array([1.05]), np.array([2.4]),
-                                     np.array([0.45]), afe=np.array([0.55]))
+    age = ii.isoInt.getLogAgeFromEEP(np.array([1.05]),
+                                     np.array([2.4]),
+                                     np.array([0.45]),
+                                     afe=np.array([0.55]))
     assert np.isfinite(age[0])
 
 
 def test_v25_tiny_download_prepare_and_run(tmp_path):
+
     def _has_finite_output(ii):
         for ifeh, feh in enumerate(ii.isoInt.ufeh):
             for iafe, afe in enumerate(ii.isoInt.uafe):
@@ -122,7 +133,7 @@ def test_v25_tiny_download_prepare_and_run(tmp_path):
                                             num=min(8, max_eep),
                                             dtype=int):
                         logage = np.float64(ii.isoInt.logage_grid[ifeh, iafe,
-                                                                   imass, ieep])
+                                                                  imass, ieep])
                         if not np.isfinite(logage):
                             continue
                         out = ii(np.float64(mass),
@@ -149,7 +160,9 @@ def test_v25_tiny_download_prepare_and_run(tmp_path):
                                            mist_version='2.5',
                                            spatial_order=3)
         except FileNotFoundError:
-            pytest.skip('LOCAL_TESTING mode: reusing local data, but v2.5 grid is not available')
+            pytest.skip(
+                'LOCAL_TESTING mode: reusing local data, but v2.5 grid is not available'
+            )
     else:
         outdir = tmp_path / 'mist25_tiny'
         minimint.download_and_prepare(filters=['DECam'],
@@ -238,7 +251,10 @@ def test_cubic_fallback_subset_indexing_regression():
     subset = np.array([1, 2], dtype=int)
     ieep = np.array([0, 0], dtype=int)
 
-    got = ti._eval_spatial_interp(grid, DD, ieep, subset=subset,
+    got = ti._eval_spatial_interp(grid,
+                                  DD,
+                                  ieep,
+                                  subset=subset,
                                   use_cubic=True)
     exp = ti._eval_linear_interp(grid, DD, ieep, subset=subset)
     np.testing.assert_allclose(got, exp, rtol=0, atol=1e-12)
@@ -321,8 +337,7 @@ def test_cubic_age_eep_monotonic(cubic_interp):
 
 def test_cubic_getmaxmass_boundary_consistency(cubic_interp):
     ii = cubic_interp
-    cases = [(-3.5, 8.033333333333333), (-2.0, 9.0), (-1.0, 10.0),
-             (0.0, 9.5)]
+    cases = [(-3.5, 8.033333333333333), (-2.0, 9.0), (-1.0, 10.0), (0.0, 9.5)]
     for feh, lage in cases:
         mass = ii.getMaxMass(lage, feh)
         assert np.isfinite(ii(mass, lage, feh)['DECam_g'])
@@ -465,8 +480,10 @@ def test_numba_dispatch_parity():
         out_nb = ii(m, a, f)
 
         for k in ['logg', 'logteff', 'logl', 'phase', 'DECam_g', 'DECam_r']:
-            np.testing.assert_allclose(out_np[k], out_nb[k], rtol=1e-10,
-                                       atol=1e-10, equal_nan=True)
+            np.testing.assert_allclose(out_np[k],
+                                       out_nb[k],
+                                       rtol=1e-10,
+                                       atol=1e-10,
+                                       equal_nan=True)
     finally:
         mm_utils.HAS_NUMBA = has_numba_orig
-

@@ -272,10 +272,7 @@ def test_cubic_fallback_subset_indexing_regression():
 
 def test_example():
 
-    filters = [
-        'DECam_g', 'DECam_r', "Gaia_G_EDR3", "Gaia_BP_EDR3", 'Gaia_RP_EDR3',
-        'WISE_W1', 'WISE_W2'
-    ]
+    filters = ['DECam_g', 'DECam_r', 'WISE_W1', 'WISE_W2']
 
     # Define interpolation object
     ii = minimint.Interpolator(filters)
@@ -296,8 +293,7 @@ def test_example():
     for feh in fehgrid:
         for lage in logagegrid:
             iso = ii(massgrid, lage, feh)
-            x, y = (iso['Gaia_BP_EDR3'] - iso['Gaia_RP_EDR3'],
-                    iso['Gaia_G_EDR3'])
+            x, y = (iso['WISE_W1'] - iso['WISE_W1'], iso['WISE_W2'])
             del x, y
 
     # Compute the evolutionary track

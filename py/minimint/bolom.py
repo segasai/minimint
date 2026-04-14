@@ -96,6 +96,16 @@ def read_bolom(filt, iprefix):
 class BCInterpolator:
 
     def __init__(self, prefix, filts):
+        """
+        Initialize bolometric-correction interpolation grids.
+
+        Parameters
+        ----------
+        prefix: str
+            Directory containing `bolom_points.npy` and `filt_*.npy` files.
+        filts: iterable of str
+            Filter names to load from `filt_<name>.npy`.
+        """
         filts = set(filts)
         vec = np.load(prefix + '/' + POINTS_NPY)
         ndim = vec.shape[0]
@@ -153,8 +163,16 @@ class BCInterpolator:
 
 def list_filters(path=None, mist_version='1.2', vvcrit=0.4):
     """
-    Return the list of photometric filters for which the isochrones
-    can be constructed
+    Return filter names available in prepared bolometric-correction data.
+
+    Parameters
+    ----------
+    path: str or None
+        Directory to scan. If None, resolve from `mist_version` and `vvcrit`.
+    mist_version: str
+        MIST version used when resolving the default path.
+    vvcrit: float
+        Rotation value used when resolving the default path.
     """
     if path is None:
         path = get_data_path_for_grid(mist_version=mist_version,
@@ -176,6 +194,18 @@ def prepare(iprefix,
             oprefix,
             filters=('SDSSugriz', 'SkyMapper', 'UBVRIplus', 'DECam', 'WISE',
                      'GALEX')):
+    """
+    Read bolometric-correction tables and save compact `.npy` grids.
+
+    Parameters
+    ----------
+    iprefix: str
+        Input directory containing raw BC table files.
+    oprefix: str
+        Output directory where `bolom_points.npy` and `filt_*.npy` are saved.
+    filters: iterable of str
+        Filter-system groups to read from the input directory.
+    """
     cols_ex = ['Teff', 'logg', '[Fe/H]', 'Av', 'Rv', 'lgTef', 'Fe_H', 'a_Fe']
     last_vec = None
     for i, filt in enumerate(filters):

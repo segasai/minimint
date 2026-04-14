@@ -110,7 +110,7 @@ def test_v25_alpha_synthetic(tmp_path):
 
     ii = minimint.Interpolator(['TEST_F'],
                                data_prefix=str(tmp_path),
-                               spatial_order=3,
+                               interp_mode='cubic',
                                mist_version='2.5')
     out = ii(1.05, 7.7, 0.45, afe=0.55)
     assert np.isfinite(out['TEST_F'])
@@ -157,11 +157,11 @@ def test_v25_tiny_download_prepare_and_run(tmp_path):
             ii_lin = minimint.Interpolator(['DECam_g', 'DECam_r'],
                                            data_prefix=data_prefix,
                                            mist_version='2.5',
-                                           spatial_order=1)
+                                           interp_mode='linear')
             ii_cub = minimint.Interpolator(['DECam_g', 'DECam_r'],
                                            data_prefix=data_prefix,
                                            mist_version='2.5',
-                                           spatial_order=3)
+                                           interp_mode='cubic')
         except FileNotFoundError:
             pytest.skip(
                 'LOCAL_TESTING mode: reusing local data, but v2.5 grid is not available'
@@ -184,11 +184,11 @@ def test_v25_tiny_download_prepare_and_run(tmp_path):
         ii_lin = minimint.Interpolator(['DECam_g', 'DECam_r'],
                                        data_prefix=str(outdir),
                                        mist_version='2.5',
-                                       spatial_order=1)
+                                       interp_mode='linear')
         ii_cub = minimint.Interpolator(['DECam_g', 'DECam_r'],
                                        data_prefix=str(outdir),
                                        mist_version='2.5',
-                                       spatial_order=3)
+                                       interp_mode='cubic')
 
     assert _has_finite_output(ii_lin)
     assert _has_finite_output(ii_cub)
@@ -224,7 +224,7 @@ def test_cubic_fallback_subset_indexing_regression():
     from minimint.mist_interpolator import TheoryInterpolator
 
     ti = TheoryInterpolator.__new__(TheoryInterpolator)
-    ti.spatial_order = 3
+    ti.interp_mode = 'cubic'
     ti.grid_ndim = 3
 
     # 3 points in DD, but we'll evaluate only subset=[1,2].
@@ -325,7 +325,7 @@ def test_example():
 
 @pytest.fixture(scope='module')
 def cubic_interp():
-    return minimint.Interpolator(['DECam_g'], spatial_order=3)
+    return minimint.Interpolator(['DECam_g'], interp_mode='cubic')
 
 
 def test_cubic_age_eep_monotonic(cubic_interp):
@@ -475,7 +475,7 @@ def test_numba_dispatch_parity():
         np.testing.assert_allclose(y_np, y_nb, rtol=1e-12, atol=1e-12)
 
         # End-to-end parity (small sample)
-        ii = minimint.Interpolator(['DECam_g', 'DECam_r'], spatial_order=3)
+        ii = minimint.Interpolator(['DECam_g', 'DECam_r'], interp_mode='cubic')
         m = np.linspace(0.1, 1.2, 400)
         a = np.full_like(m, 7.0)
         f = np.zeros_like(m)

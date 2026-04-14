@@ -34,6 +34,7 @@ and mass is the second axis
 
 
 def get_file(gridt):
+    """Return filename for a saved grid array by `gridt` key."""
     return '%s_grid.npy' % (gridt)
 
 
@@ -43,10 +44,12 @@ KNOWN_BAD_TRACK = dict(feh=-2.0, afe=0.2, initial_mass=0.1)
 
 
 def get_interp_ready_file(gridt):
+    """Return filename for finite interpolation-ready grid by `gridt` key."""
     return f'{gridt}_interp_grid.npy'
 
 
 def _normalize_mist_version(mist_version):
+    """Validate and normalize a MIST version string."""
     mist_version = utils.normalize_mist_version(mist_version)
     if mist_version not in ('1.2', '2.5'):
         raise ValueError('Only MIST versions 1.2 and 2.5 are supported'
@@ -55,12 +58,14 @@ def _normalize_mist_version(mist_version):
 
 
 def _is_known_bad_track(feh, afe, initial_mass):
+    """Return True for the known problematic MIST v2.5 low-mass track."""
     return (np.isclose(feh, KNOWN_BAD_TRACK['feh'])
             and np.isclose(afe, KNOWN_BAD_TRACK['afe'])
             and np.isclose(initial_mass, KNOWN_BAD_TRACK['initial_mass']))
 
 
 def _is_substellar_lowmass_track(track_type, initial_mass):
+    """Return True for substellar 0.1 Msun tracks."""
     return (np.isclose(initial_mass, KNOWN_BAD_TRACK['initial_mass'])
             and str(track_type).strip().lower().startswith('substellar'))
 
@@ -114,6 +119,7 @@ def _patch_known_bad_track(grid, ufeh, uafe, umass, grid_name):
 
 
 def getheader(f):
+    """Parse MIST EEP file header metadata."""
     fp = open(f, 'r')
     for i in range(5):
         ll = fp.readline()
@@ -134,6 +140,7 @@ def getheader(f):
 
 
 def read_grid(eep_prefix):
+    """Read and merge EEP tables found under `eep_prefix`."""
     mask = os.path.join(eep_prefix, '*EEPS', '*eep')
     fs = glob.glob(mask)
     if len(fs) == 0:
@@ -196,6 +203,11 @@ def grid3d_filler(ima):
     This fills nan gaps along one dimension in a 3d cube.
     I fill the gaps along mass dimension
     The array is modified
+
+    Parameters
+    ----------
+    ima: np.ndarray
+        Input 3D array modified in-place.
     """
     nx, ny, nz = ima.shape
     for i in range(nx):
@@ -208,6 +220,11 @@ def grid1d_filler(arr):
     This takes a vector with gaps filled with nans.
     It then fills the internal gaps with linear interpolation
     Input is modified
+
+    Parameters
+    ----------
+    arr: np.ndarray
+        Input 1D array modified in-place.
     """
     xids = np.nonzero(np.isfinite(arr))[0]
     if len(xids) == 0:
@@ -291,14 +308,17 @@ def build_interp_ready_grid_4d(grid):
 
 
 def _get_bc_url_v12(x):
+    """Return BC tarball URL for MIST v1.2."""
     return 'https://waps.cfa.harvard.edu/MIST/BC_tables/v1/%s.txz' % x
 
 
 def _get_bc_url_v25(x):
+    """Return BC tarball URL for MIST v2.5."""
     return 'https://mist.science/BC_tables/v2/%s.txz' % x
 
 
 def _get_eep_url_v12(feh, vvcrit=0.4):
+    """Return EEP tarball URL for MIST v1.2 at one [Fe/H]."""
     feh_tag = _format_feh_v12(feh)
     return ('https://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/' +
             'MIST_v1.2_feh_%s_afe_p0.0_vvcrit%.1f_EEPS.txz') % (feh_tag,
@@ -306,6 +326,7 @@ def _get_eep_url_v12(feh, vvcrit=0.4):
 
 
 def _get_eep_url_v25(feh, afe, vvcrit=0.4):
+    """Return EEP tarball URL for MIST v2.5 at one [Fe/H] and [alpha/Fe]."""
     feh_tag = _format_feh_v25(feh)
     afe_tag = _format_afe(afe)
     return ('https://mist.science/data/tarballs_v2.5/eeps/' +
@@ -314,6 +335,7 @@ def _get_eep_url_v25(feh, afe, vvcrit=0.4):
 
 
 def _get_default_grid(mist_version):
+    """Return default [Fe/H] and [alpha/Fe] grids for a MIST version."""
 
     if mist_version == '1.2':
         feh_values = np.concatenate(
@@ -329,18 +351,21 @@ def _get_default_grid(mist_version):
 
 
 def _format_feh_v12(feh):
+    """Format [Fe/H] token for MIST v1.2 filename conventions."""
     sign = 'm' if feh < 0 else 'p'
     val = abs(feh)
     return f"{sign}{val:.2f}"
 
 
 def _format_feh_v25(feh):
+    """Format [Fe/H] token for MIST v2.5 filename conventions."""
     sign = 'm' if feh < 0 else 'p'
     val = int(round(abs(feh) * 100))
     return f"{sign}{val:03d}"
 
 
 def _format_afe(afe):
+    """Format [alpha/Fe] token for MIST v2.5 filename conventions."""
     sign = 'm' if afe < 0 else 'p'
     val = int(round(abs(afe) * 10))
     return f"{sign}{val:d}"
@@ -371,7 +396,14 @@ def _download_and_unpack(url, pref):
 
 def get_bc_urls(filters, mist_version='1.2'):
     """
-    Get the list of bolometric correction URLs
+    Get bolometric-correction download URLs.
+
+    Parameters
+    ----------
+    filters: iterable of str
+        Filter-system groups to download.
+    mist_version: str
+        MIST version string ("1.2" or "2.5").
     """
     ret = []
     if mist_version == '1.2':
@@ -388,7 +420,18 @@ def get_eep_urls(feh_values=None,
                  mist_version='1.2',
                  vvcrit=0.4):
     """
-    Get the list of EEP URLs
+    Get EEP track download URLs.
+
+    Parameters
+    ----------
+    feh_values: iterable or None
+        [Fe/H] values to include. If None, version defaults are used.
+    afe_values: iterable or None
+        [alpha/Fe] values to include. If None, version defaults are used.
+    mist_version: str
+        MIST version string ("1.2" or "2.5").
+    vvcrit: float
+        Rotation value used in URL naming.
     """
     ret = []
     default_grid = _get_default_grid(mist_version)
@@ -496,6 +539,16 @@ def prepare(eep_prefix,
         The path that has *EEP folders where *eep files will be searched
     bolom_prefix: string
         The path that has bolometric correction files *DECam *UBRI etc
+    outp_prefix: string or None
+        Output directory for prepared arrays.
+    bc_only: bool
+        If True, prepare only bolometric-correction data.
+    filters: iterable of str
+        Filter-system groups used for BC preparation.
+    vvcrit: float
+        Rotation value used to select versioned output paths.
+    mist_version: str
+        MIST version string ("1.2" or "2.5").
     """
     mist_version = _normalize_mist_version(mist_version)
     if bolom_prefix is None:
@@ -684,6 +737,7 @@ def _binary_search(bads, logage, neep, getAge):
 
 
 def _interpolator_2d_eep(grid, wfeh, ifehs, wmass, imasses, ieep):
+    """Evaluate 2D (feh, mass) interpolation at fixed EEP indices."""
     ieep = np.asarray(ieep, dtype=int)
     return utils._interpolator_2d(grid, wfeh, ifehs, wmass, imasses, ieep)
 
@@ -692,9 +746,23 @@ class TheoryInterpolator:
 
     def __init__(self,
                  prefix=None,
-                 spatial_order=1,
+                 interp_mode='linear',
                  mist_version='1.2',
                  vvcrit=0.4):
+        """
+        Initialize theory-grid interpolator for stellar quantities.
+
+        Parameters
+        ----------
+        prefix: str or None
+            Directory containing prepared theory grids.
+        interp_mode: str
+            Spatial interpolation mode: 'linear' or 'cubic'.
+        mist_version: str
+            MIST version string ("1.2" or "2.5").
+        vvcrit: float
+            Rotation value used when resolving default data path.
+        """
         mist_version = _normalize_mist_version(mist_version)
         if prefix is None:
             prefix = utils.get_data_path_for_grid(mist_version=mist_version,
@@ -726,18 +794,21 @@ class TheoryInterpolator:
                 f'Validity file {VALID_EEP_MAX_NPY} not found in {prefix}. '
                 'Please re-run minimint.download_and_prepare(...)')
         self.valid_eep_max = np.load(valid_eep_path)
-        if spatial_order not in (1, 3):
-            raise ValueError('spatial_order must be 1 (linear) or 3 (cubic)')
-        self.spatial_order = spatial_order
+        interp_mode = str(interp_mode).strip().lower()
+        if interp_mode not in ('linear', 'cubic'):
+            raise ValueError("interp_mode must be 'linear' or 'cubic'")
+        self.interp_mode = interp_mode
         self._warned_afe = False
 
     def _warn_afe_ignored(self, afe):
+        """Warn once when non-zero [alpha/Fe] is passed to a 3D (v1.2) grid."""
         if self.grid_ndim == 3 and (not self._warned_afe):
             if np.any(~np.isclose(np.asarray(afe, dtype=np.float64), 0.0)):
                 warnings.warn('[alpha/Fe] is ignored for MIST v1.2 grids.')
                 self._warned_afe = True
 
     def _eval_linear_interp(self, grid, DD, ieep, subset=None):
+        """Evaluate linear spatial interpolation for a given EEP selection."""
         if subset is None:
             subset = slice(None)
         if self.grid_ndim == 3:
@@ -758,9 +829,10 @@ class TheoryInterpolator:
                              ieep,
                              subset=None,
                              use_cubic=False):
+        """Evaluate spatial interpolation with optional cubic mode and fallback."""
         if subset is None:
             subset = slice(None)
-        if not (use_cubic and self.spatial_order == 3):
+        if not (use_cubic and self.interp_mode == 'cubic'):
             return self._eval_linear_interp(grid, DD, ieep, subset=subset)
 
         ieep = np.asarray(ieep, dtype=int)
@@ -803,6 +875,7 @@ class TheoryInterpolator:
         return res
 
     def _get_eep_coeffs(self, mass, logage, feh, afe=0.0):
+        """Compute interpolation coefficients and EEP bracketing for queries."""
         feh, mass, logage, afe = [
             np.atleast_1d(np.asarray(_, dtype=np.float64))
             for _ in [feh, mass, logage, afe]
@@ -835,7 +908,7 @@ class TheoryInterpolator:
             wmass_lin, imasses_lin = utils._get_linear_coeffs(
                 mass, self.umass, l1mass)
             wf = ifehs = wm = imasses = None
-            if self.spatial_order == 3:
+            if self.interp_mode == 'cubic':
                 wf, ifehs = utils._get_cubic_coeffs(feh, self.ufeh, l1feh)
                 wm, imasses = utils._get_cubic_coeffs(mass, self.umass, l1mass)
 
@@ -843,7 +916,7 @@ class TheoryInterpolator:
                 if np.isscalar(cureep_vec):
                     cureep_vec = np.full(len(subset), float(cureep_vec))
                 ieep = np.asarray(cureep_vec, dtype=int)
-                if self.spatial_order == 3:
+                if self.interp_mode == 'cubic':
                     res = utils._interpolator_bicubic(self.logage_grid,
                                                       wf[subset],
                                                       ifehs[subset],
@@ -873,7 +946,7 @@ class TheoryInterpolator:
             wmass_lin, imasses_lin = utils._get_linear_coeffs(
                 mass, self.umass, l1mass)
             wf = ifehs = wa = iafes = wm = imasses = None
-            if self.spatial_order == 3:
+            if self.interp_mode == 'cubic':
                 wf, ifehs = utils._get_cubic_coeffs(feh, self.ufeh, l1feh)
                 wa, iafes = utils._get_cubic_coeffs(afe, self.uafe, l1afe)
                 wm, imasses = utils._get_cubic_coeffs(mass, self.umass, l1mass)
@@ -882,7 +955,7 @@ class TheoryInterpolator:
                 if np.isscalar(cureep_vec):
                     cureep_vec = np.full(len(subset), float(cureep_vec))
                 ieep = np.asarray(cureep_vec, dtype=int)
-                if self.spatial_order == 3:
+                if self.interp_mode == 'cubic':
                     res = utils._interpolator_3d_eep(self.logage_grid,
                                                      wf[subset], ifehs[subset],
                                                      wa[subset], iafes[subset],
@@ -942,13 +1015,27 @@ class TheoryInterpolator:
                      iafes_lin=iafes_lin,
                      l1afe=l1afe,
                      l2afe=l2afe))
-        if self.spatial_order == 3:
+        if self.interp_mode == 'cubic':
             ret.update(dict(wf=wf, ifehs=ifehs, wm=wm, imasses=imasses))
             if self.grid_ndim == 4:
                 ret.update(dict(wa=wa, iafes=iafes))
         return ret
 
     def __call__(self, mass, logage, feh, afe=0.0):
+        """
+        Interpolate theoretical quantities (`logg`, `logteff`, `logl`, `phase`).
+
+        Parameters
+        ----------
+        mass: float or array-like
+            Stellar mass values.
+        logage: float or array-like
+            Log10 age values.
+        feh: float or array-like
+            Metallicity [Fe/H] values.
+        afe: float or array-like
+            Alpha enhancement [alpha/Fe] values.
+        """
         self._warn_afe_ignored(afe)
         feh, mass, logage, afe = [
             np.atleast_1d(np.asarray(_)) for _ in [feh, mass, logage, afe]
@@ -1016,6 +1103,22 @@ class TheoryInterpolator:
         return ret
 
     def getLogAgeFromEEP(self, mass, eep, feh, afe=0.0, returnJac=False):
+        """
+        Interpolate log-age as a function of EEP, mass, and composition.
+
+        Parameters
+        ----------
+        mass: float or array-like
+            Stellar mass values.
+        eep: float or array-like
+            EEP positions.
+        feh: float or array-like
+            Metallicity [Fe/H] values.
+        afe: float or array-like
+            Alpha enhancement [alpha/Fe] values.
+        returnJac: bool
+            If True, also return an approximate derivative d(logage)/dEEP.
+        """
         self._warn_afe_ignored(afe)
         feh, mass, eep, afe = [
             np.atleast_1d(np.asarray(_, dtype=np.float64))
@@ -1048,7 +1151,7 @@ class TheoryInterpolator:
         if self.grid_ndim == 4:
             DD['wafe_lin'], DD['iafes_lin'] = utils._get_linear_coeffs(
                 afe, self.uafe, l1afe)
-        if self.spatial_order == 3:
+        if self.interp_mode == 'cubic':
             DD['wf'], DD['ifehs'] = utils._get_cubic_coeffs(
                 feh, self.ufeh, l1feh)
             DD['wm'], DD['imasses'] = utils._get_cubic_coeffs(
@@ -1100,6 +1203,10 @@ class TheoryInterpolator:
         return (ret_logage, jac) if returnJac else ret_logage
 
     def getMaxMassMS(self, logage, feh, afe=0.0):
+        """
+        Return the approximate maximum main-sequence mass for `logage`, `feh`,
+        and `afe`.
+        """
         self._warn_afe_ignored(afe)
         N = len(self.umass) - 1
         i1 = 1
@@ -1119,6 +1226,10 @@ class TheoryInterpolator:
         return self.umass[i1]
 
     def getMaxMass(self, logage, feh, afe=0.0):
+        """
+        Return the maximum mass with finite interpolation for `logage`, `feh`,
+        and `afe`.
+        """
         self._warn_afe_ignored(afe)
         logage, feh, afe = np.float64(logage), np.float64(feh), np.float64(afe)
         niter = 40
@@ -1181,6 +1292,7 @@ class TheoryInterpolator:
         return lo * (1 - 1e-10)
 
     def _isvalid(self, mass, logage, feh, afe=0.0, l1feh=None, l1afe=None):
+        """Check whether a query point is valid for isochrone interpolation."""
         mass = np.float64(mass)
         logage = np.float64(logage)
         feh = np.float64(feh)
@@ -1199,7 +1311,7 @@ class TheoryInterpolator:
             wmass_lin, imasses_lin = utils._get_linear_coeffs(
                 np.array([mass]), self.umass, np.array([l1mass]))
             wf = ifehs = wm = imasses = None
-            if self.spatial_order == 3:
+            if self.interp_mode == 'cubic':
                 wf, ifehs = utils._get_cubic_coeffs(np.array([feh]), self.ufeh,
                                                     np.array([l1feh]))
                 wm, imasses = utils._get_cubic_coeffs(np.array([mass]),
@@ -1211,7 +1323,7 @@ class TheoryInterpolator:
 
             def getAge(cureep):
                 ieep = np.array([cureep], dtype=int)
-                if self.spatial_order == 3:
+                if self.interp_mode == 'cubic':
                     val = utils._interpolator_bicubic(self.logage_grid, wf,
                                                       ifehs, wm, imasses,
                                                       ieep)[0]
@@ -1242,7 +1354,7 @@ class TheoryInterpolator:
             wmass_lin, imasses_lin = utils._get_linear_coeffs(
                 np.array([mass]), self.umass, np.array([l1mass]))
             wf = ifehs = wa = iafes = wm = imasses = None
-            if self.spatial_order == 3:
+            if self.interp_mode == 'cubic':
                 wf, ifehs = utils._get_cubic_coeffs(np.array([feh]), self.ufeh,
                                                     np.array([l1feh]))
                 wa, iafes = utils._get_cubic_coeffs(np.array([afe]), self.uafe,
@@ -1257,7 +1369,7 @@ class TheoryInterpolator:
 
             def getAge(cureep):
                 ieep = np.array([cureep], dtype=int)
-                if self.spatial_order == 3:
+                if self.interp_mode == 'cubic':
                     val = utils._interpolator_3d_eep(self.logage_grid, wf,
                                                      ifehs, wa, iafes, wm,
                                                      imasses, ieep)[0]
@@ -1311,6 +1423,7 @@ class TheoryInterpolator:
                        l1mass,
                        l2mass,
                        afe=0.0):
+        """Estimate max mass inside one linear interpolation cell (3D grids)."""
         if self.grid_ndim == 4:
             raise NotImplementedError(
                 '_getMaxMassBox is not implemented for 4D grids')
@@ -1341,7 +1454,7 @@ class Interpolator:
     def __init__(self,
                  filts,
                  data_prefix=None,
-                 spatial_order=1,
+                 interp_mode='linear',
                  mist_version='1.2',
                  vvcrit=0.4):
         """
@@ -1354,8 +1467,8 @@ class Interpolator:
             List of strings, such as ['DECam_g','WISE_W1']
         data_prefix: str
             String for the data
-        spatial_order: int
-            Order of spatial interpolation (1 for linear, 3 for cubic)
+        interp_mode: str
+            Spatial interpolation mode: 'linear' or 'cubic'
         mist_version: str
             MIST version ("1.2" or "2.5").
         vvcrit: float
@@ -1366,7 +1479,7 @@ class Interpolator:
             data_prefix = utils.get_data_path_for_grid(
                 mist_version=mist_version, vvcrit=vvcrit, create=False)
         self.isoInt = TheoryInterpolator(data_prefix,
-                                         spatial_order=spatial_order,
+                                         interp_mode=interp_mode,
                                          mist_version=mist_version,
                                          vvcrit=vvcrit)
         self.bolomInt = bolom.BCInterpolator(data_prefix, filts)
@@ -1428,8 +1541,31 @@ class Interpolator:
         return ret
 
     def getMaxMass(self, logage, feh, afe=0.0):
-        """ Return the maximum mass on a given isochrone """
+        """
+        Return the maximum mass on a given isochrone.
+
+        Parameters
+        ----------
+        logage: float
+            Log10 age value.
+        feh: float
+            Metallicity [Fe/H].
+        afe: float
+            Alpha enhancement [alpha/Fe].
+        """
         return self.isoInt.getMaxMass(logage, feh, afe)
 
     def getMaxMassMS(self, logage, feh, afe=0.0):
+        """
+        Return the maximum mass still on the main sequence.
+
+        Parameters
+        ----------
+        logage: float
+            Log10 age value.
+        feh: float
+            Metallicity [Fe/H].
+        afe: float
+            Alpha enhancement [alpha/Fe].
+        """
         return self.isoInt.getMaxMassMS(logage, feh, afe)

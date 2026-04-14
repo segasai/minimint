@@ -18,6 +18,9 @@ DEFAULT_MIST_VERSION = '1.2'
 
 
 def get_data_path():
+    """
+    Return the base directory containing prepared minimint datasets.
+    """
     path = os.environ.get('MINIMINT_DATA_PATH')
     if path is not None:
         return path
@@ -27,6 +30,9 @@ def get_data_path():
 
 
 def normalize_mist_version(mist_version=None):
+    """
+    Normalize `mist_version` string (for example `v1.2` -> `1.2`).
+    """
     if mist_version is None:
         return DEFAULT_MIST_VERSION
     return str(mist_version).lstrip('v')
@@ -37,6 +43,15 @@ def get_data_path_for_grid(mist_version=DEFAULT_MIST_VERSION,
                            create=True):
     """
     Return a dataset path for a given MIST version and vvcrit.
+
+    Parameters
+    ----------
+    mist_version: str
+        MIST version label.
+    vvcrit: float
+        Rotation value used in the path naming convention.
+    create: bool
+        If True, create the directory when missing.
     """
     mist_version = normalize_mist_version(mist_version)
     vvcrit = float(vvcrit)
@@ -97,6 +112,7 @@ def _get_axis_coeffs(x, x_grid, j, order):
 
 @njit(cache=True)
 def _interpolator_2d_numba(grid, w0, i0, w1, i1, ie):
+    """Numba implementation of generic 2D tensor-product interpolation."""
     n = w0.shape[0]
     k0 = w0.shape[1]
     k1 = w1.shape[1]
@@ -115,6 +131,7 @@ def _interpolator_2d_numba(grid, w0, i0, w1, i1, ie):
 
 @njit(cache=True)
 def _interpolator_2d_numba_2x2(grid, w0, i0, w1, i1, ie):
+    """Numba implementation of specialized 2x2 2D interpolation."""
     n = w0.shape[0]
     out = np.zeros(n, dtype=np.float64)
     for t in range(n):
@@ -128,6 +145,7 @@ def _interpolator_2d_numba_2x2(grid, w0, i0, w1, i1, ie):
 
 @njit(cache=True)
 def _interpolator_2d_numba_4x4(grid, w0, i0, w1, i1, ie):
+    """Numba implementation of specialized 4x4 2D interpolation."""
     n = w0.shape[0]
     out = np.zeros(n, dtype=np.float64)
     for t in range(n):
@@ -275,6 +293,7 @@ def _interpolator_tricubic(grid, wf, ifehs, wm, imasses, we, ieeps):
 
 @njit(cache=True)
 def _interpolator_tricubic_numba(grid, wf, ifehs, wm, imasses, we, ieeps):
+    """Numba implementation of tricubic interpolation."""
     n = wf.shape[0]
     out = np.zeros(n, dtype=np.float64)
     for t in range(n):
@@ -293,6 +312,7 @@ def _interpolator_tricubic_numba(grid, wf, ifehs, wm, imasses, we, ieeps):
 
 @njit(cache=True)
 def _interpolator_4d_numba(grid, w0, i0, w1, i1, w2, i2, w3, i3):
+    """Numba implementation of generic 4D tensor-product interpolation."""
     n = w0.shape[0]
     k0 = w0.shape[1]
     k1 = w1.shape[1]
@@ -340,6 +360,7 @@ def _interpolator_4d(grid, w0, i0, w1, i1, w2, i2, w3, i3):
 
 @njit(cache=True)
 def _interpolator_3d_eep_numba(grid, w0, i0, w1, i1, w2, i2, ie):
+    """Numba implementation of 3D interpolation at fixed EEP index."""
     n = w0.shape[0]
     k0 = w0.shape[1]
     k1 = w1.shape[1]
@@ -382,6 +403,7 @@ def _interpolator_3d_eep(grid, w0, i0, w1, i1, w2, i2, ie):
 
 @njit(cache=True)
 def _interpolator_5d_numba(grid, w0, i0, w1, i1, w2, i2, w3, i3, w4, i4):
+    """Numba implementation of generic 5D tensor-product interpolation."""
     n = w0.shape[0]
     k0 = w0.shape[1]
     k1 = w1.shape[1]
@@ -458,7 +480,20 @@ def steffen_interp(y_m1, y_0, y_1, y_2, t):
 
 def solve_steffen_t(y_m1, y_0, y_1, y_2, target_y):
     """
-    Find t in [0, 1] such that steffen_interp(..., t) == target_y.
+    Find `t` in `[0, 1]` such that `steffen_interp(..., t) == target_y`.
+
+    Parameters
+    ----------
+    y_m1: array-like
+        Value at `x=-1`.
+    y_0: array-like
+        Value at `x=0`.
+    y_1: array-like
+        Value at `x=1`.
+    y_2: array-like
+        Value at `x=2`.
+    target_y: array-like
+        Target interpolation value to invert for.
     """
     s_0 = y_1 - y_0
     s_m1 = np.where(np.isfinite(y_m1), y_0 - y_m1, s_0)

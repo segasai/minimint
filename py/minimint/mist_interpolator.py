@@ -460,9 +460,11 @@ def prepare(eep_prefix,
         raise RuntimeError(
             'The arguments must be paths to the directories with EEP \
             and bolometric corrections')
+
+    print('Reading/processing bolometric corrections')
+    bolom.prepare(bolom_prefix, outp_prefix, filters)
+
     if bc_only:
-        print('Reading/processing bolometric corrections')
-        bolom.prepare(bolom_prefix, outp_prefix, filters)
         return
 
     tab = read_grid(eep_prefix)

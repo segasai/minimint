@@ -412,6 +412,47 @@ def test_numba_dispatch_parity():
                                          w4, i4)
         np.testing.assert_allclose(y_np, y_nb, rtol=1e-12, atol=1e-12)
 
+        # 3D-eep kernel parity
+        grid3e = rng.normal(size=(6, 7, 8, 11))
+        ie = rng.integers(0, 11, size=n)
+        i0 = rng.integers(0, 6, size=(n, 4))
+        i1 = rng.integers(0, 7, size=(n, 4))
+        i2 = rng.integers(0, 8, size=(n, 4))
+        w0 = rng.random((n, 4))
+        w1 = rng.random((n, 4))
+        w2 = rng.random((n, 4))
+        w0 /= w0.sum(axis=1, keepdims=True)
+        w1 /= w1.sum(axis=1, keepdims=True)
+        w2 /= w2.sum(axis=1, keepdims=True)
+
+        mm_utils.HAS_NUMBA = False
+        y_np = mm_utils._interpolator_3d_eep(grid3e, w0, i0, w1, i1, w2, i2,
+                                             ie)
+        mm_utils.HAS_NUMBA = True
+        y_nb = mm_utils._interpolator_3d_eep(grid3e, w0, i0, w1, i1, w2, i2,
+                                             ie)
+        np.testing.assert_allclose(y_np, y_nb, rtol=1e-12, atol=1e-12)
+
+        # Tricubic kernel parity
+        grid3 = rng.normal(size=(6, 7, 13))
+        ifehs = rng.integers(0, 6, size=(n, 4))
+        imasses = rng.integers(0, 7, size=(n, 4))
+        ieeps = rng.integers(0, 13, size=(n, 4))
+        wf = rng.random((n, 4))
+        wm = rng.random((n, 4))
+        we = rng.random((n, 4))
+        wf /= wf.sum(axis=1, keepdims=True)
+        wm /= wm.sum(axis=1, keepdims=True)
+        we /= we.sum(axis=1, keepdims=True)
+
+        mm_utils.HAS_NUMBA = False
+        y_np = mm_utils._interpolator_tricubic(grid3, wf, ifehs, wm, imasses,
+                                               we, ieeps)
+        mm_utils.HAS_NUMBA = True
+        y_nb = mm_utils._interpolator_tricubic(grid3, wf, ifehs, wm, imasses,
+                                               we, ieeps)
+        np.testing.assert_allclose(y_np, y_nb, rtol=1e-12, atol=1e-12)
+
         # End-to-end parity (small sample)
         ii = minimint.Interpolator(['DECam_g', 'DECam_r'], spatial_order=3)
         m = np.linspace(0.1, 1.2, 400)
@@ -428,3 +469,4 @@ def test_numba_dispatch_parity():
                                        atol=1e-10, equal_nan=True)
     finally:
         mm_utils.HAS_NUMBA = has_numba_orig
+

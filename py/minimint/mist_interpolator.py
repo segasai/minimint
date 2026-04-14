@@ -370,6 +370,9 @@ def _download_and_unpack(url, pref):
 
 
 def get_bc_urls(filters, mist_version='1.2'):
+    """
+    Get the list of bolometric correction URLs
+    """
     ret = []
     if mist_version == '1.2':
         get_bc_url = _get_bc_url_v12
@@ -384,7 +387,15 @@ def get_eep_urls(feh_values=None,
                  afe_values=None,
                  mist_version='1.2',
                  vvcrit=0.4):
+    """
+    Get the list of EEP URLs
+    """
     ret = []
+    default_grid = _get_default_grid(mist_version)
+    if feh_values is None:
+        feh_values = default_grid['feh']
+    if afe_values is None:
+        afe_values = default_grid['afe']
     if mist_version == '1.2':
         for cur_feh in feh_values:
             ret.append(_get_eep_url_v12(cur_feh, vvcrit=vvcrit))

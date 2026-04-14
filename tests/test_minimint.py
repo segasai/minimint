@@ -9,9 +9,9 @@ def test_small_install_v12():
     if os.environ.get('LOCAL_TESTING') is not None:
         pass
     else:
-        minimint.download_and_prepare(feh_values=[-4, -3, -1, 0],
+        minimint.download_and_prepare(feh_values=[-4, -3, -1, -.5, 0, .5],
                                       filters=['DECam', 'WISE'])
-        minimint.download_and_prepare(feh_values=[-4, -3, -1, 0],
+        minimint.download_and_prepare(feh_values=[-4, -3, -1, -.5, 0, .5],
                                       filters=['SkyMapper'],
                                       bc_only=True)
 

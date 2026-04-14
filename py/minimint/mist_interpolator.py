@@ -462,9 +462,10 @@ def download_and_prepare(filters=[
                          bc_only=False,
                          feh_values=None,
                          afe_values=None):
-    """ Download the MIST isochrones and prepare the preprocessed isochrones
-    Parameters
+    """
+    Download MIST archives and prepare interpolation-ready data products.
 
+    Parameters
     ----------
     filters: tuple
         List of filter systems ['DECam','GALEX',...']
@@ -530,14 +531,14 @@ def prepare(eep_prefix,
             vvcrit=0.4,
             mist_version='1.2'):
     """
-    Prepare the isochrone files
+    Prepare local EEP/BC files into minimint interpolation grids.
 
     Parameters
     ----------
     eep_prefix: string
-        The path that has *EEP folders where *eep files will be searched
+        Path containing EEP folders/files to ingest.
     bolom_prefix: string
-        The path that has bolometric correction files *DECam *UBRI etc
+        Path containing bolometric-correction files to ingest.
     outp_prefix: string or None
         Output directory for prepared arrays.
     bc_only: bool

@@ -36,24 +36,24 @@ interpolator:
    import minimint
    minimint.download_and_prepare()
 
-This step is required at least once for each dataset location.
 
 Manual download flow
 --------------------
 
 If you downloaded files yourself, place them into the target data directory
-and run:
+and run: 
 
 .. code-block:: python
 
    import minimint
    minimint.prepare()
 
-You can get source URLs with ``minimint.get_eep_urls()`` and
+This will create everything needed for minimint.
+
+You can get the URLs to download with ``minimint.get_eep_urls()`` and
 ``minimint.get_bc_urls()``.
 
 Data location
 -------------
 
-Prepared datasets are stored under ``MINIMINT_DATA_PATH``. If the variable is
-not set, minimint uses its package-local ``data`` directory.
+Prepared datasets are stored by default in the data/ folder where minimint is installed, unless ``MINIMINT_DATA_PATH`` is defined.

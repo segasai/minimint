@@ -290,17 +290,48 @@ def build_interp_ready_grid_4d(grid):
     return grid_filled
 
 
-def __bc_url_v12(x):
+def _get_bc_url_v12(x):
     return 'https://waps.cfa.harvard.edu/MIST/BC_tables/v1/%s.txz' % x
 
 
-def __bc_url_v25(x):
+def _get_bc_url_v25(x):
     return 'https://mist.science/BC_tables/v2/%s.txz' % x
 
 
-def __eep_url_v12(x, vvcrit=0.4):
+def _get_eep_url_v12(feh, vvcrit=0.4):
+    feh_tag = _format_feh_v12(feh)
     return ('https://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/' +
-            'MIST_v1.2_feh_%s_afe_p0.0_vvcrit%.1f_EEPS.txz') % (x, vvcrit)
+            'MIST_v1.2_feh_%s_afe_p0.0_vvcrit%.1f_EEPS.txz') % (feh_tag,
+                                                                vvcrit)
+
+
+def _get_eep_url_v25(feh, afe, vvcrit=0.4):
+    feh_tag = _format_feh_v25(feh)
+    afe_tag = _format_afe(afe)
+    return ('https://mist.science/data/tarballs_v2.5/eeps/' +
+            'MIST_v2.5_feh_%s_afe_%s_vvcrit%.1f_EEPS.txz') % (feh_tag, afe_tag,
+                                                              vvcrit)
+
+
+def _get_default_grid(mist_version):
+
+    if mist_version == '1.2':
+        feh_values = np.concatenate(
+            [np.arange(-4, -2 + .1, 0.5),
+             np.arange(-1.75, 0.5 + .1, 0.25)])
+        afe_values = [0.0]
+    else:
+        feh_values = np.concatenate(
+            [np.arange(-4, -3 + .1, 0.5),
+             np.arange(-2.75, 0.5 + .1, 0.25)])
+        afe_values = np.arange(-0.2, 0.6 + 0.1, 0.2)
+    return {'feh': feh_values, 'afe': afe_values}
+
+
+def _format_feh_v12(feh):
+    sign = 'm' if feh < 0 else 'p'
+    val = abs(feh)
+    return f"{sign}{val:.2f}"
 
 
 def _format_feh_v25(feh):
@@ -309,18 +340,10 @@ def _format_feh_v25(feh):
     return f"{sign}{val:03d}"
 
 
-def _format_afe_v25(afe):
+def _format_afe(afe):
     sign = 'm' if afe < 0 else 'p'
     val = int(round(abs(afe) * 10))
     return f"{sign}{val:d}"
-
-
-def __eep_url_v25(feh, afe, vvcrit=0.4):
-    feh_tag = _format_feh_v25(feh)
-    afe_tag = _format_afe_v25(afe)
-    return ('https://mist.science/data/tarballs_v2.5/eeps/' +
-            'MIST_v2.5_feh_%s_afe_%s_vvcrit%.1f_EEPS.txz') % (feh_tag, afe_tag,
-                                                              vvcrit)
 
 
 def _download_and_unpack(url, pref):
@@ -328,13 +351,11 @@ def _download_and_unpack(url, pref):
     Download a URL and unpack it in the folder
     """
     print('Downloading', url)
-    fd = urllib.request.urlopen(url)
-    fname = url.split('/')[-1]
-    fname_out = os.path.join(pref, fname)
-    fdout = open(fname_out, 'wb')
-    fdout.write(fd.read())
-    fdout.close()
-    fd.close()
+    with urllib.request.urlopen(url) as fd:
+        fname = url.split('/')[-1]
+        fname_out = os.path.join(pref, fname)
+        with open(fname_out, 'wb') as fd_out:
+            fd_out.write(fd.read())
     if os.name == 'nt':
         fname_out1 = fname_out.replace('.txz', '.tar')
         cmd = (f'cd /d {pref} && '
@@ -346,6 +367,35 @@ def _download_and_unpack(url, pref):
     if ret.returncode != 0:
         raise RuntimeError('Failed to untar the files' + ret.stdout.decode() +
                            ret.stderr.decode())
+
+
+def get_bc_urls(filters, mist_version='1.2'):
+    ret = []
+    if mist_version == '1.2':
+        get_bc_url = _get_bc_url_v12
+    if mist_version == '2.5':
+        get_bc_url = _get_bc_url_v25
+    for curfilt in filters:
+        ret.append(get_bc_url(curfilt))
+    return ret
+
+
+def get_eep_urls(feh_values=None,
+                 afe_values=None,
+                 mist_version='1.2',
+                 vvcrit=0.4):
+    ret = []
+    if mist_version == '1.2':
+        for cur_feh in feh_values:
+            ret.append(_get_eep_url_v12(cur_feh, vvcrit=vvcrit))
+    if mist_version == '2.5':
+        for cur_feh in feh_values:
+            for cur_afe in afe_values:
+                if np.isclose(cur_feh, 0.5) and np.isclose(cur_afe, 0.6):
+                    # problematic tracks
+                    continue
+                ret.append(_get_eep_url_v25(cur_feh, cur_afe, vvcrit=vvcrit))
+    return ret
 
 
 def download_and_prepare(filters=[
@@ -385,48 +435,30 @@ def download_and_prepare(filters=[
     if outp_prefix is None:
         outp_prefix = utils.get_data_path_for_grid(mist_version=mist_version,
                                                    vvcrit=vvcrit)
-    if mist_version == '1.2':
-        if feh_values is None:
-            feh_values = [
-                -4.00, -3.50, -3.00, -2.50, -2.00, -1.75, -1.50, -1.25, -1.00,
-                -0.75, -0.50, -0.25, 0.00, 0.25, 0.50
-            ]
-        if afe_values is None:
-            afe_values = [0.0]
-        if not np.all(np.isclose(afe_values, 0.0)):
-            raise ValueError('MIST v1.2 supports only [alpha/Fe]=0.0')
+    default_grid = _get_default_grid(mist_version)
+    if feh_values is None:
+        feh_values = default_grid['feh']
+    if afe_values is None:
+        afe_values = default_grid['afe']
     else:
-        if feh_values is None:
-            feh_values = (
-                [-4.0, -3.5, -3.0] +
-                list(np.round(np.arange(-2.75, 0.50 + 0.25, 0.25), 2)))
-        if afe_values is None:
-            afe_values = np.round(np.arange(-0.2, 0.6 + 0.2, 0.2), 2)
+        if mist_version == '1.2' and not np.all(np.isclose(afe_values, 0.0)):
+            raise ValueError('MIST v1.2 supports only [alpha/Fe]=0.0')
     if not np.isclose([0., 0.4], vvcrit).any():
         raise ValueError('Only 0 and 0.4 values are allowed')
 
     with tempfile.TemporaryDirectory(dir=tmp_prefix) as cur_dir:
-        for curfilt in filters:
-            if mist_version == '1.2':
-                _download_and_unpack(__bc_url_v12(curfilt), cur_dir)
-            else:
-                _download_and_unpack(__bc_url_v25(curfilt), cur_dir)
+        urls = get_bc_urls(filters, mist_version=mist_version)
         if not bc_only:
-            if mist_version == '1.2':
-                mets = [
-                    f"{'m' if x < 0 else 'p'}{abs(x):.2f}" for x in feh_values
-                ]
-                for curmet in mets:
-                    _download_and_unpack(__eep_url_v12(curmet, vvcrit=vvcrit),
-                                         cur_dir)
-            else:
-                for curfeh in feh_values:
-                    for curafe in afe_values:
-                        if np.isclose(curfeh, 0.5) and np.isclose(curafe, 0.6):
-                            continue
-                        _download_and_unpack(
-                            __eep_url_v25(curfeh, curafe, vvcrit=vvcrit),
-                            cur_dir)
+            if mist_version == '2.5':
+                print('WARNING the temporary size of the downloaded'
+                      'tracks for the full grid is ~ 100 GB')
+            urls = urls + get_eep_urls(feh_values=feh_values,
+                                       afe_values=afe_values,
+                                       mist_version=mist_version,
+                                       vvcrit=vvcrit)
+        for u in urls:
+            _download_and_unpack(u, cur_dir)
+
         prepare(cur_dir,
                 bolom_prefix=cur_dir,
                 outp_prefix=outp_prefix,

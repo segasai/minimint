@@ -356,6 +356,7 @@ def download_and_prepare(filters=[
                          tmp_prefix=None,
                          vvcrit=0.4,
                          mist_version='1.2',
+                         bc_only=False,
                          feh_values=None,
                          afe_values=None):
     """ Download the MIST isochrones and prepare the prerocessed isochrones
@@ -373,6 +374,8 @@ def download_and_prepare(filters=[
         you can also use the value of 0
     mist_version: str
         MIST version ("1.2" or "2.5").
+    bc_only: bool
+        If true, only download the bolometric corrections
     feh_values: list (optional)
         List of [Fe/H] values to download. If None, uses defaults for version.
     afe_values: list (optional)
@@ -408,23 +411,28 @@ def download_and_prepare(filters=[
                 _download_and_unpack(__bc_url_v12(curfilt), cur_dir)
             else:
                 _download_and_unpack(__bc_url_v25(curfilt), cur_dir)
-        if mist_version == '1.2':
-            mets = [f"{'m' if x < 0 else 'p'}{abs(x):.2f}" for x in feh_values]
-            for curmet in mets:
-                _download_and_unpack(__eep_url_v12(curmet, vvcrit=vvcrit),
-                                     cur_dir)
-        else:
-            for curfeh in feh_values:
-                for curafe in afe_values:
-                    if np.isclose(curfeh, 0.5) and np.isclose(curafe, 0.6):
-                        continue
-                    _download_and_unpack(
-                        __eep_url_v25(curfeh, curafe, vvcrit=vvcrit), cur_dir)
+        if not bc_only:
+            if mist_version == '1.2':
+                mets = [
+                    f"{'m' if x < 0 else 'p'}{abs(x):.2f}" for x in feh_values
+                ]
+                for curmet in mets:
+                    _download_and_unpack(__eep_url_v12(curmet, vvcrit=vvcrit),
+                                         cur_dir)
+            else:
+                for curfeh in feh_values:
+                    for curafe in afe_values:
+                        if np.isclose(curfeh, 0.5) and np.isclose(curafe, 0.6):
+                            continue
+                        _download_and_unpack(
+                            __eep_url_v25(curfeh, curafe, vvcrit=vvcrit),
+                            cur_dir)
         prepare(cur_dir,
-                cur_dir,
+                bolom_prefix=cur_dir,
                 outp_prefix=outp_prefix,
                 filters=filters,
                 vvcrit=vvcrit,
+                bc_only=bc_only,
                 mist_version=mist_version)
 
 

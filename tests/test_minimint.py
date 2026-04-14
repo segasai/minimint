@@ -10,7 +10,10 @@ def test_small_install_v12():
         pass
     else:
         minimint.download_and_prepare(feh_values=[-4, -3, -1, 0],
-                                      filters=['DEcam', 'WISE', 'SkyMapper'])
+                                      filters=['DECam', 'WISE'])
+        minimint.download_and_prepare(feh_values=[-4, -3, -1, 0],
+                                      filters=['SkyMapper'],
+                                      bc_only=True)
 
 
 def test_run():
@@ -171,6 +174,13 @@ def test_v25_tiny_download_prepare_and_run(tmp_path):
                                       vvcrit=0.4,
                                       feh_values=[0.0, 0.25, 0.5],
                                       afe_values=[0.2, 0.4, 0.6])
+        minimint.download_and_prepare(filters=['WISE'],
+                                      outp_prefix=str(outdir),
+                                      mist_version='2.5',
+                                      vvcrit=0.4,
+                                      feh_values=[0.0, 0.25, 0.5],
+                                      afe_values=[0.2, 0.4, 0.6],
+                                      bc_only=True)
         ii_lin = minimint.Interpolator(['DECam_g', 'DECam_r'],
                                        data_prefix=str(outdir),
                                        mist_version='2.5',

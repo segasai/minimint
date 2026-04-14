@@ -130,7 +130,7 @@ def grid1d_filler(arr):
 
 
 def __bc_url(x):
-    return 'https://waps.cfa.harvard.edu/MIST/BC_tables/%s.txz' % x
+    return 'https://waps.cfa.harvard.edu/MIST/BC_tables/v1/%s.txz' % x
 
 
 def __eep_url(x, vvcrit=0.4):

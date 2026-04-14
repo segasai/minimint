@@ -1,4 +1,5 @@
 [![Build Status](https://github.com/segasai/minimint/workflows/Minimint/badge.svg)](https://github.com/segasai/minimint/actions?query=workflow%3AMinimint)
+[![Documentation Status](https://readthedocs.org/projects/minimint/badge/?version=latest)](https://minimint.readthedocs.io/en/latest/?badge=latest)
 [![Coverage Status](https://coveralls.io/repos/github/segasai/minimint/badge.svg?branch=master)](https://coveralls.io/github/segasai/minimint?branch=master)[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5610692.svg)](https://doi.org/10.5281/zenodo.5610692)
 
 

@@ -55,6 +55,25 @@ Prepared data are stored in versioned subdirectories under `MINIMINT_DATA_PATH` 
 
 If you already downloaded MIST archives manually, you can unpack them yourself and run only the preparation step:
 
+You can also get the expected archive URLs directly from minimint:
+
+```python
+import minimint
+
+# Bolometric-correction archives
+bc_urls = minimint.get_bc_urls(['DECam', 'WISE'], mist_version='2.5')
+
+# EEP track archives
+eep_urls = minimint.get_eep_urls(
+    feh_values=[-1.0, -0.5, 0.0],
+    afe_values=[0.0, 0.2, 0.4],
+    mist_version='2.5',
+    vvcrit=0.4,
+)
+```
+
+Download/unpack those URLs however you prefer, then run:
+
 ```python
 import minimint
 
@@ -120,6 +139,20 @@ See the [notebook](examples/Example.ipynb) in the examples folder
 ## Synthetic stellar populations
 If you are interested in synthetic stellar populations you will need
 an implementation of the IMF. For this you may want to use https://github.com/keflavich/imf
+
+## Interpolation mode
+
+Minimint supports two interpolation modes via `interp_mode`:
+
+- `interp_mode='linear'`: more conservative and typically more robust on sparse/coarse grids.
+- `interp_mode='cubic'`: smoother cubic interpolation, but it can be a bit 'wiggly' in the parts of HRD with very rapid changes (like the horizontal branch region)
+
+Examples:
+
+```python
+ii_lin = minimint.Interpolator(['DECam_g', 'DECam_r'], interp_mode='linear')
+ii_cub = minimint.Interpolator(['DECam_g', 'DECam_r'], interp_mode='cubic')
+```
 
 ## Acknowledgement
 

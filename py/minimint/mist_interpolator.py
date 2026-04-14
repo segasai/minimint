@@ -49,9 +49,8 @@ def get_interp_ready_file(gridt):
 def _normalize_mist_version(mist_version):
     mist_version = utils.normalize_mist_version(mist_version)
     if mist_version not in ('1.2', '2.5'):
-        raise ValueError(
-            f'Only MIST versions 1.2 and 2.5 are supported, got: {mist_version}'
-        )
+        raise ValueError('Only MIST versions 1.2 and 2.5 are supported'
+                         f'got: {mist_version}')
     return mist_version
 
 
@@ -324,6 +323,31 @@ def __eep_url_v25(feh, afe, vvcrit=0.4):
                                                               vvcrit)
 
 
+def _download_and_unpack(url, pref):
+    """
+    Download a URL and unpack it in the folder
+    """
+    print('Downloading', url)
+    fd = urllib.request.urlopen(url)
+    fname = url.split('/')[-1]
+    fname_out = os.path.join(pref, fname)
+    fdout = open(fname_out, 'wb')
+    fdout.write(fd.read())
+    fdout.close()
+    fd.close()
+    if os.name == 'nt':
+        fname_out1 = fname_out.replace('.txz', '.tar')
+        cmd = (f'cd /d {pref} && '
+               f'7z x {fname_out} && '
+               f'7z x {fname_out1}')
+    else:
+        cmd = f'cd {pref}; tar xfJ {fname_out}'
+    ret = subprocess.run(cmd, shell=True, timeout=60, capture_output=True)
+    if ret.returncode != 0:
+        raise RuntimeError('Failed to untar the files' + ret.stdout.decode() +
+                           ret.stderr.decode())
+
+
 def download_and_prepare(filters=[
     'DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper', 'UBVRIplus',
     'WISE'
@@ -378,45 +402,26 @@ def download_and_prepare(filters=[
     if not np.isclose([0., 0.4], vvcrit).any():
         raise ValueError('Only 0 and 0.4 values are allowed')
 
-    def writer(url, pref):
-        print('Downloading', url)
-        fd = urllib.request.urlopen(url)
-        fname = url.split('/')[-1]
-        fname_out = os.path.join(pref, fname)
-        fdout = open(fname_out, 'wb')
-        fdout.write(fd.read())
-        fdout.close()
-        fd.close()
-        if os.name == 'nt':
-            fname_out1 = fname_out.replace('.txz', '.tar')
-            cmd = (f'cd /d {pref} && '
-                   f'7z x {fname_out} && '
-                   f'7z x {fname_out1}')
-        else:
-            cmd = f'cd {pref}; tar xfJ {fname_out}'
-        ret = subprocess.run(cmd, shell=True, timeout=60, capture_output=True)
-        if ret.returncode != 0:
-            raise RuntimeError('Failed to untar the files' +
-                               ret.stdout.decode() + ret.stderr.decode())
-
-    with tempfile.TemporaryDirectory(dir=tmp_prefix) as T:
+    with tempfile.TemporaryDirectory(dir=tmp_prefix) as cur_dir:
         for curfilt in filters:
             if mist_version == '1.2':
-                writer(__bc_url_v12(curfilt), T)
+                _download_and_unpack(__bc_url_v12(curfilt), cur_dir)
             else:
-                writer(__bc_url_v25(curfilt), T)
+                _download_and_unpack(__bc_url_v25(curfilt), cur_dir)
         if mist_version == '1.2':
             mets = [f"{'m' if x < 0 else 'p'}{abs(x):.2f}" for x in feh_values]
             for curmet in mets:
-                writer(__eep_url_v12(curmet, vvcrit=vvcrit), T)
+                _download_and_unpack(__eep_url_v12(curmet, vvcrit=vvcrit),
+                                     cur_dir)
         else:
             for curfeh in feh_values:
                 for curafe in afe_values:
                     if np.isclose(curfeh, 0.5) and np.isclose(curafe, 0.6):
                         continue
-                    writer(__eep_url_v25(curfeh, curafe, vvcrit=vvcrit), T)
-        prepare(T,
-                T,
+                    _download_and_unpack(
+                        __eep_url_v25(curfeh, curafe, vvcrit=vvcrit), cur_dir)
+        prepare(cur_dir,
+                cur_dir,
                 outp_prefix=outp_prefix,
                 filters=filters,
                 vvcrit=vvcrit,
@@ -424,8 +429,9 @@ def download_and_prepare(filters=[
 
 
 def prepare(eep_prefix,
-            bolom_prefix,
+            bolom_prefix=None,
             outp_prefix=None,
+            bc_only=False,
             filters=('DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper',
                      'UBVRIplus', 'WISE'),
             vvcrit=0.4,
@@ -441,16 +447,24 @@ def prepare(eep_prefix,
         The path that has bolometric correction files *DECam *UBRI etc
     """
     mist_version = _normalize_mist_version(mist_version)
+    if bolom_prefix is None:
+        bolom_prefix = eep_prefix
     if outp_prefix is None:
         outp_prefix = utils.get_data_path_for_grid(mist_version=mist_version,
                                                    vvcrit=vvcrit)
     else:
         os.makedirs(outp_prefix, exist_ok=True)
+
     print('Reading EEP grid')
     if not os.path.isdir(eep_prefix) or not os.path.isdir(outp_prefix):
         raise RuntimeError(
             'The arguments must be paths to the directories with EEP \
             and bolometric corrections')
+    if bc_only:
+        print('Reading/processing bolometric corrections')
+        bolom.prepare(bolom_prefix, outp_prefix, filters)
+        return
+
     tab = read_grid(eep_prefix)
     print('Processing EEPs')
 
@@ -544,8 +558,6 @@ def prepare(eep_prefix,
              grid_ndim=grid_ndim,
              mist_version=mist_version,
              vvcrit=np.float64(vvcrit))
-    print('Reading/processing bolometric corrections')
-    bolom.prepare(bolom_prefix, outp_prefix, filters)
 
 
 def _binary_search(bads, logage, neep, getAge):

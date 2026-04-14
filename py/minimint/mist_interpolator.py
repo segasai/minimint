@@ -43,11 +43,6 @@ VALID_EEP_MAX_NPY = 'valid_eep_max.npy'
 KNOWN_BAD_TRACK = dict(feh=-2.0, afe=0.2, initial_mass=0.1)
 
 
-def get_interp_ready_file(gridt):
-    """Return filename for finite interpolation-ready grid by `gridt` key."""
-    return f'{gridt}_interp_grid.npy'
-
-
 def _normalize_mist_version(mist_version):
     """Validate and normalize a MIST version string."""
     mist_version = utils.normalize_mist_version(mist_version)
@@ -237,74 +232,6 @@ def grid1d_filler(arr):
                                                               arr[xids],
                                                               s=0,
                                                               k=1)(xids1[mask])
-
-
-def build_interp_ready_grid(grid):
-    """
-    Prepare a finite grid for cubic interpolation.
-    """
-    grid_filled = np.array(grid, copy=True)
-    for i in range(grid_filled.shape[0]):
-        for j in range(grid_filled.shape[2]):
-            arr = grid_filled[i, :, j]
-            xids = np.nonzero(np.isfinite(arr))[0]
-            if len(xids) > 0:
-                arr[:xids[0]] = arr[xids[0]]
-                arr[xids[-1] + 1:] = arr[xids[-1]]
-            else:
-                arr[:] = 0
-    for i in range(grid_filled.shape[1]):
-        for j in range(grid_filled.shape[2]):
-            arr = grid_filled[:, i, j]
-            xids = np.nonzero(np.isfinite(arr))[0]
-            if len(xids) > 0:
-                grid1d_filler(arr)
-                arr[:xids[0]] = arr[xids[0]]
-                arr[xids[-1] + 1:] = arr[xids[-1]]
-            else:
-                arr[:] = 0
-    return grid_filled
-
-
-def build_interp_ready_grid_4d(grid):
-    """
-    Prepare a finite 4D grid (feh, afe, mass, eep) for cubic interpolation.
-    """
-    grid_filled = np.array(grid, copy=True)
-    for i in range(grid_filled.shape[0]):
-        for j in range(grid_filled.shape[1]):
-            for k in range(grid_filled.shape[3]):
-                arr = grid_filled[i, j, :, k]
-                xids = np.nonzero(np.isfinite(arr))[0]
-                if len(xids) > 0:
-                    grid1d_filler(arr)
-                    arr[:xids[0]] = arr[xids[0]]
-                    arr[xids[-1] + 1:] = arr[xids[-1]]
-                else:
-                    arr[:] = 0
-    for j in range(grid_filled.shape[1]):
-        for m in range(grid_filled.shape[2]):
-            for k in range(grid_filled.shape[3]):
-                arr = grid_filled[:, j, m, k]
-                xids = np.nonzero(np.isfinite(arr))[0]
-                if len(xids) > 0:
-                    grid1d_filler(arr)
-                    arr[:xids[0]] = arr[xids[0]]
-                    arr[xids[-1] + 1:] = arr[xids[-1]]
-                else:
-                    arr[:] = 0
-    for i in range(grid_filled.shape[0]):
-        for m in range(grid_filled.shape[2]):
-            for k in range(grid_filled.shape[3]):
-                arr = grid_filled[i, :, m, k]
-                xids = np.nonzero(np.isfinite(arr))[0]
-                if len(xids) > 0:
-                    grid1d_filler(arr)
-                    arr[:xids[0]] = arr[xids[0]]
-                    arr[xids[-1] + 1:] = arr[xids[-1]]
-                else:
-                    arr[:] = 0
-    return grid_filled
 
 
 def _get_bc_url_v12(x):
@@ -549,6 +476,35 @@ def prepare(eep_prefix,
         Rotation value used to select versioned output paths.
     mist_version: str
         MIST version string ("1.2" or "2.5").
+
+    Notes
+    -----
+    Created files
+    ^^^^^^^^^^^^^
+    Files written into ``outp_prefix`` by ``prepare()``:
+
+    - ``logage_grid.npy``:
+      Theory-grid log10(age) values on the prepared EEP grid.
+    - ``logteff_grid.npy``:
+      Theory-grid ``log_Teff`` values on the prepared EEP grid.
+    - ``logg_grid.npy``:
+      Theory-grid ``log_g`` values on the prepared EEP grid.
+    - ``logl_grid.npy``:
+      Theory-grid ``log_L`` values on the prepared EEP grid.
+    - ``phase_grid.npy``:
+      Integer evolutionary phase labels on the prepared EEP grid.
+    - ``valid_eep_max.npy``:
+      Per-grid-cell maximum valid EEP index used for validity checks.
+    - ``interp.npz``:
+      Metadata bundle with ``umass``, ``ufeh``, ``uafe``, ``neep``,
+      ``grid_ndim``, ``mist_version``, and ``vvcrit``.
+    - ``bolom_points.npy``:
+      BC interpolation coordinate matrix (axes used by BC tables).
+    - ``filt_<FILTER_NAME>.npy``:
+      One BC values array per filter in the prepared set.
+
+    If ``bc_only=True``, only ``bolom_points.npy`` and
+    ``filt_<FILTER_NAME>.npy`` files are created.
     """
     mist_version = _normalize_mist_version(mist_version)
     if bolom_prefix is None:
@@ -649,13 +605,6 @@ def prepare(eep_prefix,
                                         -1),
                                axis=3).astype(np.int16)
     np.save(os.path.join(outp_prefix, VALID_EEP_MAX_NPY), valid_eep_max)
-    for k in ('logg', 'logl', 'logteff'):
-        if grid_ndim == 3:
-            interp_ready = build_interp_ready_grid(grid_store[k])
-        else:
-            interp_ready = build_interp_ready_grid_4d(grid_store[k])
-        np.save(os.path.join(outp_prefix, get_interp_ready_file(k)),
-                interp_ready)
     np.savez(os.path.join(outp_prefix, INTERP_NPZ),
              umass=umass,
              ufeh=ufeh,

@@ -29,3 +29,9 @@ You can also query isochrone bounds:
 .. code-block:: python
 
    mmax = ii.getMaxMass(logage=9.0, feh=-1.0)
+
+Version note:
+
+- ``mist_version='1.2'`` uses the v1.2 grid (no alpha-enhanced dimension).
+- ``mist_version='2.5'`` uses the v2.5 grid and supports alpha-enhanced
+  isochrones via the ``afe`` argument.

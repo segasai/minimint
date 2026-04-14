@@ -32,6 +32,7 @@ Typically throughout the code the metallicity is the first axis
 and mass is the second axis
 """
 
+
 def get_file(gridt):
     return '%s_grid.npy' % (gridt)
 
@@ -168,9 +169,8 @@ def read_grid(eep_prefix):
         curt['EEP'] = np.arange(len(curt))
         tabs0.append(curt)
     if nskip_bad > 0:
-        warnings.warn(
-            f'Skipped {nskip_bad} known-bad MIST v2.5 track(s) '
-            '(feh=-2.0, afe=0.2, mass=0.1).')
+        warnings.warn(f'Skipped {nskip_bad} known-bad MIST v2.5 track(s) '
+                      '(feh=-2.0, afe=0.2, mass=0.1).')
     if nskip_substellar > 0:
         warnings.warn(
             f'Skipped {nskip_substellar} substellar 0.1 Msun track(s). '
@@ -218,9 +218,9 @@ def grid1d_filler(arr):
     mask = ~np.isfinite(arr[xids1])
     if mask.any():
         arr[xids1[mask]] = scipy.interpolate.UnivariateSpline(xids,
-                                                        arr[xids],
-                                                        s=0,
-                                                        k=1)(xids1[mask])
+                                                              arr[xids],
+                                                              s=0,
+                                                              k=1)(xids1[mask])
 
 
 def build_interp_ready_grid(grid):
@@ -292,7 +292,7 @@ def build_interp_ready_grid_4d(grid):
 
 
 def __bc_url_v12(x):
-    return 'https://waps.cfa.harvard.edu/MIST/BC_tables/%s.txz' % x
+    return 'https://waps.cfa.harvard.edu/MIST/BC_tables/v1/%s.txz' % x
 
 
 def __bc_url_v25(x):
@@ -320,8 +320,8 @@ def __eep_url_v25(feh, afe, vvcrit=0.4):
     feh_tag = _format_feh_v25(feh)
     afe_tag = _format_afe_v25(afe)
     return ('https://mist.science/data/tarballs_v2.5/eeps/' +
-            'MIST_v2.5_feh_%s_afe_%s_vvcrit%.1f_EEPS.txz') % (feh_tag,
-                                                              afe_tag, vvcrit)
+            'MIST_v2.5_feh_%s_afe_%s_vvcrit%.1f_EEPS.txz') % (feh_tag, afe_tag,
+                                                              vvcrit)
 
 
 def download_and_prepare(filters=[
@@ -361,8 +361,8 @@ def download_and_prepare(filters=[
     if mist_version == '1.2':
         if feh_values is None:
             feh_values = [
-                -4.00, -3.50, -3.00, -2.50, -2.00, -1.75, -1.50, -1.25,
-                -1.00, -0.75, -0.50, -0.25, 0.00, 0.25, 0.50
+                -4.00, -3.50, -3.00, -2.50, -2.00, -1.75, -1.50, -1.25, -1.00,
+                -0.75, -0.50, -0.25, 0.00, 0.25, 0.50
             ]
         if afe_values is None:
             afe_values = [0.0]
@@ -370,9 +370,9 @@ def download_and_prepare(filters=[
             raise ValueError('MIST v1.2 supports only [alpha/Fe]=0.0')
     else:
         if feh_values is None:
-            feh_values = ([-4.0, -3.5, -3.0] +
-                          list(np.round(np.arange(-2.75, 0.50 + 0.25, 0.25),
-                                        2)))
+            feh_values = (
+                [-4.0, -3.5, -3.0] +
+                list(np.round(np.arange(-2.75, 0.50 + 0.25, 0.25), 2)))
         if afe_values is None:
             afe_values = np.round(np.arange(-0.2, 0.6 + 0.2, 0.2), 2)
     if not np.isclose([0., 0.4], vvcrit).any():
@@ -524,10 +524,10 @@ def prepare(eep_prefix,
                                         np.arange(neep)[None, None, :], -1),
                                axis=2).astype(np.int16)
     else:
-        valid_eep_max = np.max(
-            np.where(np.isfinite(grid_store['logage']),
-                     np.arange(neep)[None, None, None, :], -1),
-            axis=3).astype(np.int16)
+        valid_eep_max = np.max(np.where(np.isfinite(grid_store['logage']),
+                                        np.arange(neep)[None, None, None, :],
+                                        -1),
+                               axis=3).astype(np.int16)
     np.save(os.path.join(outp_prefix, VALID_EEP_MAX_NPY), valid_eep_max)
     for k in ('logg', 'logl', 'logteff'):
         if grid_ndim == 3:
@@ -648,9 +648,11 @@ class TheoryInterpolator:
         with np.load(meta_path) as meta:
             self.umass = np.array(meta['umass'])
             self.ufeh = np.array(meta['ufeh'])
-            self.uafe = np.array(meta['uafe']) if 'uafe' in meta.files else np.array([0.0])
+            self.uafe = np.array(
+                meta['uafe']) if 'uafe' in meta.files else np.array([0.0])
             self.neep = int(meta['neep'])
-            self.grid_ndim = int(meta['grid_ndim']) if 'grid_ndim' in meta.files else 3
+            self.grid_ndim = int(
+                meta['grid_ndim']) if 'grid_ndim' in meta.files else 3
             self.mist_version = str(meta.get('mist_version', mist_version))
             self.vvcrit = float(meta.get('vvcrit', vvcrit))
         valid_eep_path = os.path.join(prefix, VALID_EEP_MAX_NPY)
@@ -685,7 +687,12 @@ class TheoryInterpolator:
                                           DD['wmass_lin'][subset],
                                           DD['imasses_lin'][subset], ieep)
 
-    def _eval_spatial_interp(self, grid, DD, ieep, subset=None, use_cubic=False):
+    def _eval_spatial_interp(self,
+                             grid,
+                             DD,
+                             ieep,
+                             subset=None,
+                             use_cubic=False):
         if subset is None:
             subset = slice(None)
         if not (use_cubic and self.spatial_order == 3):
@@ -697,7 +704,8 @@ class TheoryInterpolator:
             ifehs = DD['ifehs'][subset]
             wm = DD['wm'][subset]
             imasses = DD['imasses'][subset]
-            res = utils._interpolator_bicubic(grid, wf, ifehs, wm, imasses, ieep)
+            res = utils._interpolator_bicubic(grid, wf, ifehs, wm, imasses,
+                                              ieep)
             bad = np.zeros(len(res), dtype=bool)
             for i in range(4):
                 for j in range(4):
@@ -723,7 +731,9 @@ class TheoryInterpolator:
                 subset_idx = np.arange(DD['wfeh_lin'].shape[0])[subset]
             else:
                 subset_idx = np.asarray(subset)
-            res[bad] = self._eval_linear_interp(grid, DD, ieep[bad_idx],
+            res[bad] = self._eval_linear_interp(grid,
+                                                DD,
+                                                ieep[bad_idx],
                                                 subset=subset_idx[bad_idx])
         return res
 
@@ -755,8 +765,8 @@ class TheoryInterpolator:
         l2feh[bads] = 1
 
         if self.grid_ndim == 3:
-            wfeh_lin, ifehs_lin = utils._get_linear_coeffs(feh, self.ufeh,
-                                                           l1feh)
+            wfeh_lin, ifehs_lin = utils._get_linear_coeffs(
+                feh, self.ufeh, l1feh)
             wmass_lin, imasses_lin = utils._get_linear_coeffs(
                 mass, self.umass, l1mass)
             wf = ifehs = wm = imasses = None
@@ -769,9 +779,11 @@ class TheoryInterpolator:
                     cureep_vec = np.full(len(subset), float(cureep_vec))
                 ieep = np.asarray(cureep_vec, dtype=int)
                 if self.spatial_order == 3:
-                    res = utils._interpolator_bicubic(
-                        self.logage_grid, wf[subset], ifehs[subset],
-                        wm[subset], imasses[subset], ieep)
+                    res = utils._interpolator_bicubic(self.logage_grid,
+                                                      wf[subset],
+                                                      ifehs[subset],
+                                                      wm[subset],
+                                                      imasses[subset], ieep)
                     bad = np.zeros(len(res), dtype=bool)
                     for i in range(4):
                         for j in range(4):
@@ -789,10 +801,10 @@ class TheoryInterpolator:
                                             wmass_lin[subset],
                                             imasses_lin[subset], ieep)
         else:
-            wfeh_lin, ifehs_lin = utils._get_linear_coeffs(feh, self.ufeh,
-                                                           l1feh)
-            wafe_lin, iafes_lin = utils._get_linear_coeffs(afe, self.uafe,
-                                                           l1afe)
+            wfeh_lin, ifehs_lin = utils._get_linear_coeffs(
+                feh, self.ufeh, l1feh)
+            wafe_lin, iafes_lin = utils._get_linear_coeffs(
+                afe, self.uafe, l1afe)
             wmass_lin, imasses_lin = utils._get_linear_coeffs(
                 mass, self.umass, l1mass)
             wf = ifehs = wa = iafes = wm = imasses = None
@@ -806,10 +818,11 @@ class TheoryInterpolator:
                     cureep_vec = np.full(len(subset), float(cureep_vec))
                 ieep = np.asarray(cureep_vec, dtype=int)
                 if self.spatial_order == 3:
-                    res = utils._interpolator_3d_eep(
-                        self.logage_grid, wf[subset], ifehs[subset],
-                        wa[subset], iafes[subset], wm[subset],
-                        imasses[subset], ieep)
+                    res = utils._interpolator_3d_eep(self.logage_grid,
+                                                     wf[subset], ifehs[subset],
+                                                     wa[subset], iafes[subset],
+                                                     wm[subset],
+                                                     imasses[subset], ieep)
                     bad = np.zeros(len(res), dtype=bool)
                     for i in range(4):
                         for j in range(4):
@@ -825,13 +838,10 @@ class TheoryInterpolator:
                             iafes_lin[subset][bad], wmass_lin[subset][bad],
                             imasses_lin[subset][bad], ieep[bad])
                     return res
-                return utils._interpolator_3d_eep(self.logage_grid,
-                                                  wfeh_lin[subset],
-                                                  ifehs_lin[subset],
-                                                  wafe_lin[subset],
-                                                  iafes_lin[subset],
-                                                  wmass_lin[subset],
-                                                  imasses_lin[subset], ieep)
+                return utils._interpolator_3d_eep(
+                    self.logage_grid, wfeh_lin[subset], ifehs_lin[subset],
+                    wafe_lin[subset], iafes_lin[subset], wmass_lin[subset],
+                    imasses_lin[subset], ieep)
 
         lefts, rights, bads = _binary_search(bads, logage, self.neep, getAge)
         eep_frac = np.zeros(len(mass))
@@ -862,10 +872,11 @@ class TheoryInterpolator:
                    eep1=lefts,
                    eep2=rights)
         if self.grid_ndim == 4:
-            ret.update(dict(wafe_lin=wafe_lin,
-                            iafes_lin=iafes_lin,
-                            l1afe=l1afe,
-                            l2afe=l2afe))
+            ret.update(
+                dict(wafe_lin=wafe_lin,
+                     iafes_lin=iafes_lin,
+                     l1afe=l1afe,
+                     l2afe=l2afe))
         if self.spatial_order == 3:
             ret.update(dict(wf=wf, ifehs=ifehs, wm=wm, imasses=imasses))
             if self.grid_ndim == 4:
@@ -888,7 +899,8 @@ class TheoryInterpolator:
             eep1_good, eep2_good, eep_frac_good = [
                 _[good] for _ in [eep1, eep2, eep_frac]
             ]
-            eep_m1_good = np.clip(eep1_good - 1, 0, self.neep - 1).astype(float)
+            eep_m1_good = np.clip(eep1_good - 1, 0,
+                                  self.neep - 1).astype(float)
             eep_0_good = eep1_good.astype(float)
             eep_1_good = eep2_good.astype(float)
             eep_2_good = np.clip(eep2_good + 1, 0, self.neep - 1).astype(float)
@@ -897,22 +909,36 @@ class TheoryInterpolator:
                                    ('logteff', self.logteff_grid),
                                    ('logl', self.logl_grid)]:
                 curr = [
-                    self._eval_spatial_interp(curarr, DD, eep_m1_good,
-                                              subset=good_idx, use_cubic=True),
-                    self._eval_spatial_interp(curarr, DD, eep_0_good,
-                                              subset=good_idx, use_cubic=True),
-                    self._eval_spatial_interp(curarr, DD, eep_1_good,
-                                              subset=good_idx, use_cubic=True),
-                    self._eval_spatial_interp(curarr, DD, eep_2_good,
-                                              subset=good_idx, use_cubic=True)
+                    self._eval_spatial_interp(curarr,
+                                              DD,
+                                              eep_m1_good,
+                                              subset=good_idx,
+                                              use_cubic=True),
+                    self._eval_spatial_interp(curarr,
+                                              DD,
+                                              eep_0_good,
+                                              subset=good_idx,
+                                              use_cubic=True),
+                    self._eval_spatial_interp(curarr,
+                                              DD,
+                                              eep_1_good,
+                                              subset=good_idx,
+                                              use_cubic=True),
+                    self._eval_spatial_interp(curarr,
+                                              DD,
+                                              eep_2_good,
+                                              subset=good_idx,
+                                              use_cubic=True)
                 ]
                 xret[curkey] = utils.steffen_interp(curr[0], curr[1], curr[2],
                                                     curr[3], eep_frac_good)
 
-            phase0 = self._eval_linear_interp(self.phase_grid, DD,
+            phase0 = self._eval_linear_interp(self.phase_grid,
+                                              DD,
                                               eep1_good.astype(int),
                                               subset=good_idx)
-            phase1 = self._eval_linear_interp(self.phase_grid, DD,
+            phase1 = self._eval_linear_interp(self.phase_grid,
+                                              DD,
                                               eep2_good.astype(int),
                                               subset=good_idx)
             xret['phase'] = phase0 + eep_frac_good * (phase1 - phase0)
@@ -958,8 +984,8 @@ class TheoryInterpolator:
             DD['wafe_lin'], DD['iafes_lin'] = utils._get_linear_coeffs(
                 afe, self.uafe, l1afe)
         if self.spatial_order == 3:
-            DD['wf'], DD['ifehs'] = utils._get_cubic_coeffs(feh, self.ufeh,
-                                                             l1feh)
+            DD['wf'], DD['ifehs'] = utils._get_cubic_coeffs(
+                feh, self.ufeh, l1feh)
             DD['wm'], DD['imasses'] = utils._get_cubic_coeffs(
                 mass, self.umass, l1mass)
             if self.grid_ndim == 4:
@@ -982,14 +1008,26 @@ class TheoryInterpolator:
             eep_0 = eep1[goodsel].astype(float)
             eep_1 = eep2[goodsel].astype(float)
             eep_2 = np.clip(eep2[goodsel] + 1, 0, neep - 1).astype(float)
-            logage_m1 = self._eval_spatial_interp(self.logage_grid, DD, eep_m1,
-                                                  subset=good_idx, use_cubic=True)
-            logage_0 = self._eval_spatial_interp(self.logage_grid, DD, eep_0,
-                                                 subset=good_idx, use_cubic=True)
-            logage_1 = self._eval_spatial_interp(self.logage_grid, DD, eep_1,
-                                                 subset=good_idx, use_cubic=True)
-            logage_2 = self._eval_spatial_interp(self.logage_grid, DD, eep_2,
-                                                 subset=good_idx, use_cubic=True)
+            logage_m1 = self._eval_spatial_interp(self.logage_grid,
+                                                  DD,
+                                                  eep_m1,
+                                                  subset=good_idx,
+                                                  use_cubic=True)
+            logage_0 = self._eval_spatial_interp(self.logage_grid,
+                                                 DD,
+                                                 eep_0,
+                                                 subset=good_idx,
+                                                 use_cubic=True)
+            logage_1 = self._eval_spatial_interp(self.logage_grid,
+                                                 DD,
+                                                 eep_1,
+                                                 subset=good_idx,
+                                                 use_cubic=True)
+            logage_2 = self._eval_spatial_interp(self.logage_grid,
+                                                 DD,
+                                                 eep_2,
+                                                 subset=good_idx,
+                                                 use_cubic=True)
             ret_logage[goodsel] = utils.steffen_interp(logage_m1, logage_0,
                                                        logage_1, logage_2,
                                                        eep_frac[goodsel])
@@ -1022,7 +1060,8 @@ class TheoryInterpolator:
         im1 = 0
         im2 = len(self.umass) - 1
         l1feh = np.searchsorted(self.ufeh, feh) - 1
-        l1afe = np.searchsorted(self.uafe, afe) - 1 if self.grid_ndim == 4 else None
+        l1afe = np.searchsorted(self.uafe,
+                                afe) - 1 if self.grid_ndim == 4 else None
         if self._isvalid(self.umass[im2],
                          logage,
                          feh,
@@ -1090,9 +1129,8 @@ class TheoryInterpolator:
             if ((l2mass >= len(self.umass)) or (l2feh >= len(self.ufeh))
                     or (l1mass < 0) or (l1feh < 0)):
                 return False
-            wfeh_lin, ifehs_lin = utils._get_linear_coeffs(np.array([feh]),
-                                                           self.ufeh,
-                                                           np.array([l1feh]))
+            wfeh_lin, ifehs_lin = utils._get_linear_coeffs(
+                np.array([feh]), self.ufeh, np.array([l1feh]))
             wmass_lin, imasses_lin = utils._get_linear_coeffs(
                 np.array([mass]), self.umass, np.array([l1mass]))
             wf = ifehs = wm = imasses = None
@@ -1114,30 +1152,28 @@ class TheoryInterpolator:
                                                       ieep)[0]
                     for i in range(4):
                         for j in range(4):
-                            if not np.isfinite(self.logage_grid[ifehs[0, i],
-                                                                imasses[0, j],
-                                                                ieep[0]]):
+                            if not np.isfinite(
+                                    self.logage_grid[ifehs[0, i],
+                                                     imasses[0, j], ieep[0]]):
                                 return _interpolator_2d_eep(
                                     self.logage_grid, wfeh_lin, ifehs_lin,
                                     wmass_lin, imasses_lin, ieep)[0]
                     return val
                 return _interpolator_2d_eep(self.logage_grid, wfeh_lin,
-                                            ifehs_lin, wmass_lin,
-                                            imasses_lin, ieep)[0]
+                                            ifehs_lin, wmass_lin, imasses_lin,
+                                            ieep)[0]
         else:
             if l1afe is None:
                 l1afe = np.searchsorted(self.uafe, afe) - 1
             l2afe = l1afe + 1
             if ((l2mass >= len(self.umass)) or (l2feh >= len(self.ufeh))
-                    or (l2afe >= len(self.uafe)) or (l1mass < 0)
-                    or (l1feh < 0) or (l1afe < 0)):
+                    or (l2afe >= len(self.uafe)) or (l1mass < 0) or (l1feh < 0)
+                    or (l1afe < 0)):
                 return False
-            wfeh_lin, ifehs_lin = utils._get_linear_coeffs(np.array([feh]),
-                                                           self.ufeh,
-                                                           np.array([l1feh]))
-            wafe_lin, iafes_lin = utils._get_linear_coeffs(np.array([afe]),
-                                                           self.uafe,
-                                                           np.array([l1afe]))
+            wfeh_lin, ifehs_lin = utils._get_linear_coeffs(
+                np.array([feh]), self.ufeh, np.array([l1feh]))
+            wafe_lin, iafes_lin = utils._get_linear_coeffs(
+                np.array([afe]), self.uafe, np.array([l1afe]))
             wmass_lin, imasses_lin = utils._get_linear_coeffs(
                 np.array([mass]), self.umass, np.array([l1mass]))
             wf = ifehs = wa = iafes = wm = imasses = None
@@ -1164,10 +1200,10 @@ class TheoryInterpolator:
                         for j in range(4):
                             for k in range(4):
                                 if not np.isfinite(
-                                        self.logage_grid[ifehs[0, i],
-                                                         iafes[0, j],
-                                                         imasses[0, k],
-                                                         ieep[0]]):
+                                        self.logage_grid[ifehs[0, i], iafes[0,
+                                                                            j],
+                                                         imasses[0,
+                                                                 k], ieep[0]]):
                                     return utils._interpolator_3d_eep(
                                         self.logage_grid, wfeh_lin, ifehs_lin,
                                         wafe_lin, iafes_lin, wmass_lin,
@@ -1202,9 +1238,17 @@ class TheoryInterpolator:
             return False
         return True
 
-    def _getMaxMassBox(self, logage, feh, l1feh, l2feh, l1mass, l2mass, afe=0.0):
+    def _getMaxMassBox(self,
+                       logage,
+                       feh,
+                       l1feh,
+                       l2feh,
+                       l1mass,
+                       l2mass,
+                       afe=0.0):
         if self.grid_ndim == 4:
-            raise NotImplementedError('_getMaxMassBox is not implemented for 4D grids')
+            raise NotImplementedError(
+                '_getMaxMassBox is not implemented for 4D grids')
         x = (feh - self.ufeh[l1feh]) / (self.ufeh[l2feh] - self.ufeh[l1feh])
         V11 = self.logage_grid[l1feh, l1mass, :]
         V12 = self.logage_grid[l1feh, l2mass, :]
@@ -1217,8 +1261,9 @@ class TheoryInterpolator:
             elif x == 1:
                 yy = (logage - V21) / (V22 - V21)
             else:
-                yy = (logage - V11 * (1 - x) - V21 * x) / (
-                    (V12 - V11) * (1 - x) + (V22 - V21) * x)
+                yy = (logage - V11 *
+                      (1 - x) - V21 * x) / ((V12 - V11) * (1 - x) +
+                                            (V22 - V21) * x)
         yy = yy[np.isfinite(yy) & (yy <= 1) & (yy >= 0)]
         if len(yy) > 0:
             return self.umass[l1mass] + np.nanmax(
@@ -1293,13 +1338,13 @@ class Interpolator:
         av = ret['logl'][good_sub] * 0
         if self.bolomInt.ndim == 4:
             arr = np.array([
-                ret['logteff'][good_sub], ret['logg'][good_sub],
-                feh[good_sub], av
+                ret['logteff'][good_sub], ret['logg'][good_sub], feh[good_sub],
+                av
             ]).T
         elif self.bolomInt.ndim == 5:
             arr = np.array([
-                ret['logteff'][good_sub], ret['logg'][good_sub],
-                feh[good_sub], afe[good_sub], av
+                ret['logteff'][good_sub], ret['logg'][good_sub], feh[good_sub],
+                afe[good_sub], av
             ]).T
         else:
             raise RuntimeError(

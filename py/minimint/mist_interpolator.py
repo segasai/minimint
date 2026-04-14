@@ -406,8 +406,7 @@ def get_bc_urls(filters, mist_version='1.2'):
         MIST version string ("1.2" or "2.5").
     """
     ret = []
-    if mist_version == '1.2':
-        get_bc_url = _get_bc_url_v12
+    get_bc_url = _get_bc_url_v12
     if mist_version == '2.5':
         get_bc_url = _get_bc_url_v25
     for curfilt in filters:

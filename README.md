@@ -6,7 +6,7 @@
 
 This is a python package to perform interpolation of MIST isochrones. It is simple, in the sense that it only does one thing - predict the stellar parameters ($\log g$, $T_{eff}$, $\log L$) and photometry in a given filter for a given mass, age and metallicity. It is also vectorized, so computing photometry for large number of stars, should not be slow.
 
-Author: Sergey Koposov (2020-2025) skoposov __AT__ ed __DOT__ ac __DOT__ uk
+Author: Sergey Koposov (2020-2026) skoposov __AT__ ed __DOT__ ac __DOT__ uk
 
 ## Instructions 
 

@@ -10,7 +10,8 @@ Author: Sergey Koposov (2020-2025) skoposov __AT__ ed __DOT__ ac __DOT__ uk
 
 ## Instructions 
 
-* Install minimint. You can either pip install the released version or install from github
+* Install minimint. You can either pip install the released version or install from github. Currently the version supporting the MIST 2.5 isochrones is
+only available on github, but not yest through pypi. 
 
 ```
 pip install minimint
@@ -29,17 +30,18 @@ If you need additional filters, you can specify them using the filters parameter
 
 ``` minimint.download_and_prepare(filters=['JWST','WISE','DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper','UBVRIplus'])```
 Check which filters are available on the MIST website http://waps.cfa.harvard.edu/MIST/model_grids.html
-The downloading will take some time (20-30 min) and will use significant amount of disk space (10-30 Gb).
-
-If you want to put those processed isochrone files in a location different from the site-packages folder of minimint, you can use the outp_prefix parameter of `download_and_prepare`. You then will need to either specify the location each time when you construct the interpolators or with the MINIMINT_DATA_PATH environment variable.
 
 You can select MIST version with `mist_version`:
-
 ``` minimint.download_and_prepare(mist_version='1.2')```
 
 ``` minimint.download_and_prepare(mist_version='2.5')```
 
+For MIST 1.2 the downloading will take some time (20-30 min) and will use significant amount of disk space (10-30 Gb).
 Keep in mind that the whole 2.5 set of tracks will use ~ 100 GB of *temporary* disk space. The space used after install should be < 2GB.
+
+If you want to put those processed isochrone files in a location different from the site-packages folder of minimint, you can use the outp_prefix parameter of `download_and_prepare`. You then will need to either specify the location each time when you construct the interpolators or with the MINIMINT_DATA_PATH environment variable.
+
+
 
 You can prepare multiple rotation grids and select by `vvcrit`:
 

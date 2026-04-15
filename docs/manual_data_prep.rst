@@ -1,8 +1,8 @@
 Manual Download and Prepare
 ===========================
 
-If you download archives manually, minimint can provide URL lists and then
-prepare unpacked files locally.
+If you prefer to download MIST data manually, minimint can provide URL lists. You can then use these downloaded files to
+prepare the isochrones for the interpolators.
 
 Get archive URLs
 ----------------
@@ -21,6 +21,8 @@ Get archive URLs
 
 Prepare unpacked files
 ----------------------
+
+Here we assume that you have downloaded the EEPs and bolometric correction files and unpacked them.
 
 .. code-block:: python
 

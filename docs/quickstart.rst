@@ -1,7 +1,7 @@
 Quickstart
 ==========
 
-Prepare default data:
+Download and prepare MIST isochrones
 
 .. code-block:: python
 

@@ -29,7 +29,7 @@ That will download all the MIST files, and process the evolutionary tracks and b
 If you need additional filters, you can specify them using the filters parameter
 
 ``` minimint.download_and_prepare(filters=['JWST','WISE','DECam', 'GALEX', 'PanSTARRS', 'SDSSugriz', 'SkyMapper','UBVRIplus'])```
-Check which filters are available on the MIST website http://waps.cfa.harvard.edu/MIST/model_grids.html
+Check which filters are available on the MIST website https://mist.science/model_grids.html
 
 You can select MIST version with `mist_version`:
 ``` minimint.download_and_prepare(mist_version='1.2')```
@@ -145,4 +145,4 @@ ii_cub = minimint.Interpolator(['DECam_g', 'DECam_r'], interp_mode='cubic')
 
 If you are using this package please cite it through zenodo link
 https://doi.org/10.5281/zenodo.4002971
-Also make sure that you acknowledge MIST isochrones https://waps.cfa.harvard.edu/MIST/
+Also make sure that you acknowledge MIST isochrones https://mist.science/

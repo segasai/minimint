@@ -234,31 +234,33 @@ def grid1d_filler(arr):
                                                               k=1)(xids1[mask])
 
 
+BASE_URL = 'https://mist.science'
+
+
 def _get_bc_url_v12(x):
     """Return BC tarball URL for MIST v1.2."""
-    return 'https://waps.cfa.harvard.edu/MIST/BC_tables/v1/%s.txz' % x
+    return f'{BASE_URL}/BC_tables/v1/{x}.txz'
 
 
 def _get_bc_url_v25(x):
     """Return BC tarball URL for MIST v2.5."""
-    return 'https://mist.science/BC_tables/v2/%s.txz' % x
+    return f'{BASE_URL}/BC_tables/v2/{x}.txz'
 
 
 def _get_eep_url_v12(feh, vvcrit=0.4):
     """Return EEP tarball URL for MIST v1.2 at one [Fe/H]."""
     feh_tag = _format_feh_v12(feh)
-    return ('https://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/' +
-            'MIST_v1.2_feh_%s_afe_p0.0_vvcrit%.1f_EEPS.txz') % (feh_tag,
-                                                                vvcrit)
+    return (f'{BASE_URL}/data/tarballs_v1.2/' +
+            f'MIST_v1.2_feh_{feh_tag}_afe_p0.0_vvcrit{vvcrit:.1f}_EEPS.txz')
 
 
 def _get_eep_url_v25(feh, afe, vvcrit=0.4):
     """Return EEP tarball URL for MIST v2.5 at one [Fe/H] and [alpha/Fe]."""
     feh_tag = _format_feh_v25(feh)
     afe_tag = _format_afe(afe)
-    return ('https://mist.science/data/tarballs_v2.5/eeps/' +
-            'MIST_v2.5_feh_%s_afe_%s_vvcrit%.1f_EEPS.txz') % (feh_tag, afe_tag,
-                                                              vvcrit)
+    return (
+        f'{BASE_URL}/data/tarballs_v2.5/eeps/' +
+        f'MIST_v2.5_feh_{feh_tag}_afe_{afe_tag}_vvcrit{vvcrit:.1f}_EEPS.txz')
 
 
 def _get_default_grid(mist_version):
@@ -778,7 +780,8 @@ class TheoryInterpolator:
                              ieep,
                              subset=None,
                              use_cubic=False):
-        """Evaluate spatial interpolation with optional cubic mode and fallback."""
+        """Evaluate spatial interpolation with optional cubic mode and
+        fallback."""
         if subset is None:
             subset = slice(None)
         if not (use_cubic and self.interp_mode == 'cubic'):
@@ -824,7 +827,8 @@ class TheoryInterpolator:
         return res
 
     def _get_eep_coeffs(self, mass, logage, feh, afe=0.0):
-        """Compute interpolation coefficients and EEP bracketing for queries."""
+        """Compute interpolation coefficients and EEP bracketing
+        for queries."""
         feh, mass, logage, afe = [
             np.atleast_1d(np.asarray(_, dtype=np.float64))
             for _ in [feh, mass, logage, afe]
@@ -972,7 +976,8 @@ class TheoryInterpolator:
 
     def __call__(self, mass, logage, feh, afe=0.0):
         """
-        Interpolate theoretical quantities (`logg`, `logteff`, `logl`, `phase`).
+        Interpolate theoretical quantities
+        (`logg`, `logteff`, `logl`, `phase`).
 
         Parameters
         ----------
@@ -1372,7 +1377,8 @@ class TheoryInterpolator:
                        l1mass,
                        l2mass,
                        afe=0.0):
-        """Estimate max mass inside one linear interpolation cell (3D grids)."""
+        """Estimate max mass inside one linear interpolation cell
+        (3D grids)."""
         if self.grid_ndim == 4:
             raise NotImplementedError(
                 '_getMaxMassBox is not implemented for 4D grids')
